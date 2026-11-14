@@ -91,7 +91,7 @@ main { flex: 1 1 auto; display: grid; grid-template-columns: minmax(0, 3fr) minm
 #action-count { font: 11px/1.4 var(--mono); background: #1e3a8a99; color: #93c5fd; padding: 2px 8px; border-radius: 99px; white-space: nowrap; }
 .log p { margin: 0; color: var(--s400); }
 .log p strong { color: var(--s200); }
-#redline-log { flex: 1 1 auto; min-height: 120px; overflow-y: auto; margin: 0; padding: 0; list-style: none; background: var(--s950); border: 1px solid var(--s800); border-radius: 8px; }
+#redline-log { position: relative; flex: 1 1 auto; min-height: 120px; overflow-y: auto; margin: 0; padding: 0; list-style: none; background: var(--s950); border: 1px solid var(--s800); border-radius: 8px; }
 #redline-log:empty::after { content: "Your drawn redlines will appear here with exact (X, Y) pixel coordinates. Add a note to any mark to say what should change there."; display: block; padding: 10px; color: var(--s500); font-family: var(--mono); }
 .row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 4px 8px; align-items: start; padding: 8px 8px 9px; border-bottom: 1px solid var(--s800); cursor: pointer; }
 .row.sel { background: #1e3a8a59; }
@@ -511,7 +511,7 @@ function specText() {
   return lines.join('\n').trimEnd() + '\n';
 }
 function updateLog() {
-  const s = cur(), list = $('redline-log'); list.replaceChildren();
+  const s = cur(), list = $('redline-log'), keep = list.scrollTop; list.replaceChildren();
   const n = s ? s.actions.length : 0;
   $('action-count').textContent = `${n} mark${n === 1 ? '' : 's'}`;
   if (!s) return;
@@ -528,11 +528,19 @@ function updateLog() {
     row.addEventListener('click', (e) => { if (e.target === ta) return; selectedId = a.id; markSel(); renderCanvas(); });
     list.append(row); grow(ta);
   });
+  list.scrollTop = keep;
   markSel();
 }
 function grow(ta) { ta.style.height = 'auto'; ta.style.height = Math.min(140, ta.scrollHeight + 2) + 'px'; }
 function markSel(scroll) {
-  for (const r of $('redline-log').children) { const on = Number(r.dataset.id) === selectedId; r.classList.toggle('sel', on); if (on && scroll) r.scrollIntoView({ block: 'nearest' }); }
+  const list = $('redline-log');
+  for (const r of list.children) {
+    const on = Number(r.dataset.id) === selectedId; r.classList.toggle('sel', on);
+    if (on && scroll) {   // scroll inside the log only; the page stays where the user is working
+      const top = r.offsetTop, bottom = top + r.offsetHeight;
+      if (top < list.scrollTop) list.scrollTop = top; else if (bottom > list.scrollTop + list.clientHeight) list.scrollTop = bottom - list.clientHeight;
+    }
+  }
   $('btn-delete-selected').disabled = !selected();
 }
 function deleteSelected() {
@@ -628,7 +636,7 @@ const cursorFor = (t) => t === 'pan' ? 'grab' : t === 'select' ? 'default' : t =
 const typing = (t) => t && (t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.tagName === 'INPUT' && !['checkbox', 'range', 'color', 'file'].includes(t.type));
 document.addEventListener('keydown', (e) => {
   if (!$('out-dlg').hidden || !$('url-dlg').hidden) { if (e.key === 'Escape') closeDialogs(); return; }
-  if (typing(e.target)) { if (e.key === 'Escape') { e.target.blur(); canvas.focus(); } return; }
+  if (typing(e.target)) { if (e.key === 'Escape') { e.target.blur(); canvas.focus({ preventScroll: true }); } return; }
   const mod = e.ctrlKey || e.metaKey, k = e.key.toLowerCase(), s = cur(), a = selected();
   if (mod && k === 'z') { e.preventDefault(); e.shiftKey ? step('redo', 'undo') : step('undo', 'redo'); return; }
   if (mod && k === 'y') { e.preventDefault(); step('redo', 'undo'); return; }

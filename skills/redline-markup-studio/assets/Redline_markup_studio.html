@@ -163,8 +163,8 @@ textarea { width: 100%; background: var(--s950); border: 1px solid var(--s800); 
     <button type="button" data-tool="rect" class="tool-btn">⬜ Box</button>
     <button type="button" data-tool="cross" class="tool-btn">❌ Red X (Remove)</button>
     <span class="sep"></span>
-    <button type="button" data-tool="select" class="tool-btn" title="Click any mark on the image to select it, then press Delete Selected (or the Delete key). Drag a selected mark to move it, drag a corner to resize it.">🖱️ Select</button>
-    <button type="button" data-tool="pan" class="tool-btn" title="Drag to move around a zoomed image (or hold Space with any tool)">✋ Pan</button>
+    <button type="button" data-tool="select" class="tool-btn" title="Click any mark on the image to select it, then press Delete Selected (or Backspace / Del). Drag a selected mark to move it, drag a corner to resize it. Shortcut with any tool: Ctrl + left click.">🖱️ Select</button>
+    <button type="button" data-tool="pan" class="tool-btn" title="Drag to move around a zoomed image. Shortcut with any tool: Shift + left drag.">✋ Pan</button>
   </div>
   <div class="grp">
     <span class="cap">Color:</span>
@@ -217,7 +217,7 @@ textarea { width: 100%; background: var(--s950); border: 1px solid var(--s800); 
       <div class="dropveil" id="dropveil" hidden>Drop to add this image</div>
     </div>
     <div class="foot">
-      <span>Tip: Drag to draw lines, arrows, circles, or Red X's. To remove one mark, pick 🖱️ Select, click it, then Delete Selected. Scroll to zoom.</span>
+      <span>Tip: Drag to draw lines, arrows, circles, or Red X's. Shift + drag pans, Ctrl + click selects a mark, Backspace or Del removes it. Scroll to zoom.</span>
       <span id="status-toast" role="status">Ready.</span>
     </div>
   </div>
@@ -571,9 +571,10 @@ canvas.addEventListener('pointerdown', (e) => {
   const s = cur(); if (!s) return;
   canvas.focus({ preventScroll: true });
   const pos = getCanvasCoords(e), v = s.view;
-  if (currentTool === 'pan' || spaceDown || e.button === 1) { drag = { kind: 'pan', sx: pos.sx, sy: pos.sy, ox: v.ox, oy: v.oy }; canvas.style.cursor = 'grabbing'; }
-  else if (e.button !== 0) return;
-  else if (currentTool === 'select') {
+  const left = e.button === 0;   // Shift + left drag pans and Ctrl + left click selects, whichever tool is active
+  if (currentTool === 'pan' || spaceDown || e.button === 1 || (left && e.shiftKey)) { drag = { kind: 'pan', sx: pos.sx, sy: pos.sy, ox: v.ox, oy: v.oy }; canvas.style.cursor = 'grabbing'; }
+  else if (!left) return;
+  else if (currentTool === 'select' || e.ctrlKey || e.metaKey) {
     const tol = 7 / v.z, a0 = selected(), h = a0 && handles(a0).find(h => Math.hypot(h.x - pos.rx, h.y - pos.ry) <= 9 / v.z);
     if (h) { pushUndo(); drag = { kind: 'resize', a: a0, k: h.k, moved: false }; }
     else {
@@ -618,6 +619,7 @@ function shift(a, dx, dy) {
 function endDrag() {
   const s = cur(), d = drag; drag = null; if (!s || !d) return;
   canvas.style.cursor = cursorFor(currentTool);
+  if (d.kind === 'pan') showToast('Panned. Press Fit to see the whole image again.');
   if (d.kind === 'draw') {
     if (d.a.tool !== 'pen' && d.a.x1 === d.a.x2 && d.a.y1 === d.a.y2) { renderCanvas(); return; }   // a stray click, not a mark
     pushUndo(); s.actions.push(d.a); refresh(); markSel(true);
@@ -650,6 +652,11 @@ document.addEventListener('keydown', (e) => {
   }
 });
 document.addEventListener('keyup', (e) => { if (e.key === ' ') { spaceDown = false; canvas.style.cursor = cursorFor(currentTool); } });
+/* show what a click will do while Shift (pan) or Ctrl (select) is held */
+const modCursor = (e) => { if (!drag) canvas.style.cursor = e.shiftKey || spaceDown ? 'grab' : e.ctrlKey || e.metaKey ? 'default' : cursorFor(currentTool); };
+window.addEventListener('keydown', modCursor); window.addEventListener('keyup', modCursor);
+window.addEventListener('blur', () => { spaceDown = false; if (!drag) canvas.style.cursor = cursorFor(currentTool); });
+canvas.addEventListener('contextmenu', (e) => { if (e.ctrlKey) e.preventDefault(); });   // Ctrl + click on a Mac
 
 /* ---------- drop + paste ---------- */
 let dragDepth = 0;

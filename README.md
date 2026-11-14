@@ -13,7 +13,8 @@ It is a Claude **plugin** that carries one **skill**. The same skill also upload
 - **A live coordinate log.** Every mark gets a numbered line with exact pixel coordinates, and the same number is drawn as a badge on the image. Add a note to any mark to say what should change there.
 - **One-click hand-off.** In Claude Code, **Send to Claude** saves the marked-up PNG, the clean original and the spec into your project and Claude picks them up. Anywhere else, copy or download the image and copy the spec into the chat.
 - **Fix one mark without undoing the rest.** Pick Select, click any mark on the image (or its line in the log), then Delete Selected. Drag a selected mark to move it.
-- **Extras.** Zoom and pan for large images, several images at once.
+- **Mouse shortcuts with any tool.** Shift + left drag pans, Ctrl + left click selects a mark, Backspace or Del removes it, the scroll wheel zooms.
+- **Extras.** Several images at once, zoom buttons and Fit.
 - **Private.** The studio loads nothing from the internet. In Claude Code the helper listens on `127.0.0.1` only and writes to `.redline_markup_studio/` inside your project (ignored by git).
 
 ## Install in Claude Code

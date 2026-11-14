@@ -4,6 +4,7 @@
   "version": "1.0.0",
   "description": "Drop in any image, draw redlines on it, and hand Claude the marked-up PNG with an exact coordinate spec of every change you want.",
   "author": { "name": "Hverdu86" },
+  "license": "MIT",
   "homepage": "https://github.com/Hverdu86/markup-studio",
   "repository": "https://github.com/Hverdu86/markup-studio",
   "keywords": ["redline", "markup", "annotate", "image", "screenshot", "drawing"]

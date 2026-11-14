@@ -85,3 +85,7 @@ Rebuild the zip after changing the skill:
 ```bash
 cd skills && zip -r ../dist/redline-markup-studio.zip redline-markup-studio -x '*/__pycache__/*'
 ```
+
+## License
+
+[MIT](LICENSE)

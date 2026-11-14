@@ -162,9 +162,8 @@ textarea { width: 100%; background: var(--s950); border: 1px solid var(--s800); 
     <button type="button" data-tool="circle" class="tool-btn">⭕ Circle</button>
     <button type="button" data-tool="rect" class="tool-btn">⬜ Box</button>
     <button type="button" data-tool="cross" class="tool-btn">❌ Red X (Remove)</button>
-    <button type="button" data-tool="text" class="tool-btn">🔤 Text Label</button>
     <span class="sep"></span>
-    <button type="button" data-tool="select" class="tool-btn" title="Click a mark to select it. Drag to move, drag a corner to resize, Delete to remove.">🖱️ Select / Move</button>
+    <button type="button" data-tool="select" class="tool-btn" title="Click any mark on the image to select it, then press Delete Selected (or the Delete key). Drag a selected mark to move it, drag a corner to resize it.">🖱️ Select</button>
     <button type="button" data-tool="pan" class="tool-btn" title="Drag to move around a zoomed image (or hold Space with any tool)">✋ Pan</button>
   </div>
   <div class="grp">
@@ -182,6 +181,7 @@ textarea { width: 100%; background: var(--s950); border: 1px solid var(--s800); 
     <span class="sep"></span>
     <button id="btn-undo" type="button" class="btn sm">↩ Undo</button>
     <button id="btn-redo" type="button" class="btn sm">↪ Redo</button>
+    <button id="btn-delete-selected" type="button" class="btn sm danger" disabled title="Removes only the selected mark. Pick one with the Select tool or by clicking its line in the log.">✖ Delete Selected</button>
     <button id="btn-clear" type="button" class="btn sm danger">🗑 Clear All</button>
   </div>
 </div>
@@ -200,6 +200,7 @@ textarea { width: 100%; background: var(--s950); border: 1px solid var(--s800); 
   <div class="grp">
     <label for="text-stamp-input" style="color:var(--s400)">Text Stamp String:</label>
     <input id="text-stamp-input" class="field" type="text" placeholder="Type label, then click canvas with 🔤 Text tool..." value="Move here" style="width:224px;border-radius:4px;padding:4px 10px">
+    <button type="button" data-tool="text" class="tool-btn" title="Click the image to stamp the Text Stamp String there">🔤 Text Label</button>
     <span id="cursor-coords" class="mono">X: 0, Y: 0</span>
   </div>
 </div>
@@ -216,7 +217,7 @@ textarea { width: 100%; background: var(--s950); border: 1px solid var(--s800); 
       <div class="dropveil" id="dropveil" hidden>Drop to add this image</div>
     </div>
     <div class="foot">
-      <span>Tip: Drag to draw lines, arrows, circles, or Red X's. Every mark records exact pixel coordinates on the right. Scroll to zoom.</span>
+      <span>Tip: Drag to draw lines, arrows, circles, or Red X's. To remove one mark, pick 🖱️ Select, click it, then Delete Selected. Scroll to zoom.</span>
       <span id="status-toast" role="status">Ready.</span>
     </div>
   </div>
@@ -532,6 +533,13 @@ function updateLog() {
 function grow(ta) { ta.style.height = 'auto'; ta.style.height = Math.min(140, ta.scrollHeight + 2) + 'px'; }
 function markSel(scroll) {
   for (const r of $('redline-log').children) { const on = Number(r.dataset.id) === selectedId; r.classList.toggle('sel', on); if (on && scroll) r.scrollIntoView({ block: 'nearest' }); }
+  $('btn-delete-selected').disabled = !selected();
+}
+function deleteSelected() {
+  const s = cur(), a = selected(); if (!s || !a) return;
+  const n = s.actions.indexOf(a) + 1;
+  pushUndo(); s.actions.splice(n - 1, 1); selectedId = null; refresh();
+  showToast(`Deleted mark ${n}. The other marks are untouched; Undo brings it back.`);
 }
 function syncButtons() {
   const s = cur();
@@ -563,7 +571,8 @@ canvas.addEventListener('pointerdown', (e) => {
     else {
       const a = [...s.actions].reverse().find(a => hit(a, s, pos.rx, pos.ry, tol));
       selectedId = a ? a.id : null; markSel(true);
-      if (a) { pushUndo(); drag = { kind: 'move', a, x: pos.x, y: pos.y, moved: false }; }
+      if (a) { pushUndo(); drag = { kind: 'move', a, x: pos.x, y: pos.y, moved: false }; showToast(`Selected mark ${s.actions.indexOf(a) + 1}. Click Delete Selected (or press Delete) to remove it, or drag to move it.`); }
+      else showToast('Nothing selected. Click directly on a mark or its number.');
     }
   } else if (currentTool === 'text') {
     const txt = textStampInput.value.trim() || 'Note';
@@ -625,7 +634,7 @@ document.addEventListener('keydown', (e) => {
   if (mod && k === 'y') { e.preventDefault(); step('redo', 'undo'); return; }
   if (mod || e.altKey) return;
   if (e.key === ' ') { spaceDown = true; canvas.style.cursor = 'grab'; e.preventDefault(); return; }
-  if ((e.key === 'Delete' || e.key === 'Backspace') && a) { pushUndo(); s.actions.splice(s.actions.indexOf(a), 1); selectedId = null; refresh(); e.preventDefault(); return; }
+  if ((e.key === 'Delete' || e.key === 'Backspace') && a) { deleteSelected(); e.preventDefault(); return; }
   if (e.key === 'Escape') { selectedId = null; drag = null; refresh(); return; }
   if (e.key.startsWith('Arrow') && a) {
     const d = e.shiftKey ? 10 : 1; pushUndo();
@@ -802,6 +811,7 @@ $('stroke-width').addEventListener('input', (e) => {
 });
 $('btn-undo').addEventListener('click', () => step('undo', 'redo'));
 $('btn-redo').addEventListener('click', () => step('redo', 'undo'));
+$('btn-delete-selected').addEventListener('click', deleteSelected);
 $('btn-clear').addEventListener('click', () => { const s = cur(); if (!s || !s.actions.length) return; pushUndo(); s.actions = []; selectedId = null; refresh(); showToast('Cleared all redline annotations. Undo brings them back.'); });
 imageSelect.addEventListener('change', (e) => { current = Number(e.target.value); selectedId = null; refresh(); showToast(`Showing ${cur().name}`); });
 $('btn-remove-image').addEventListener('click', () => { const s = cur(); if (!s) return; images.splice(current, 1); current = Math.min(current, images.length - 1); selectedId = null; refresh(); showToast(`Removed ${s.name}`); });

@@ -1,0 +1,13 @@
+{
+  "name": "markup-studio",
+  "owner": { "name": "Hverdu86" },
+  "metadata": { "description": "Redline_markup_studio: mark up images so Claude knows exactly what to change." },
+  "plugins": [
+    {
+      "name": "redline-markup-studio",
+      "displayName": "Redline_markup_studio",
+      "source": "./",
+      "description": "Drop in any image, draw redlines on it, and hand Claude the marked-up PNG with an exact coordinate spec of every change you want."
+    }
+  ]
+}

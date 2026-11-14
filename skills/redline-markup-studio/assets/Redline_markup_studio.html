@@ -1,0 +1,826 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Redline_markup_studio</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* Layout: header, tool bar, stamp bar, then canvas (3/4) beside the live coordinate log (1/4).
+   One committed dark slate look. No external files: works offline, as a local page, or as an artifact. */
+:root {
+  color-scheme: dark;
+  --s950: #020617; --s900: #0f172a; --s800: #1e293b; --s700: #334155; --s600: #475569; --s500: #64748b;
+  --s400: #94a3b8; --s300: #cbd5e1; --s200: #e2e8f0; --s50: #f8fafc;
+  --blue: #2563eb; --blue-hi: #3b82f6; --blue-lo: #60a5fa;
+  --emerald: #059669; --emerald-hi: #10b981; --emerald-text: #34d399;
+  --red: #b91c1c; --red-hi: #dc2626; --rose-bg: #5b1027; --rose-line: #be123c; --rose-text: #fecdd3; --amber: #fbbf24;
+  --sans: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "Cascadia Mono", Menlo, Consolas, monospace;
+  --gl: max(16px, env(safe-area-inset-left, 0px)); --gr: max(16px, env(safe-area-inset-right, 0px));
+}
+*, *::before, *::after { box-sizing: border-box; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--s900); color: var(--s50); font: 12px/1.45 var(--sans); display: flex; flex-direction: column; min-height: 100%; }
+[hidden] { display: none !important; }
+button, input, select, textarea { font: inherit; color: inherit; }
+button, select, label.btn { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--blue-lo); outline-offset: 1px; }
+.mono { font-family: var(--mono); }
+
+.band { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px;
+  padding: 8px var(--gr) 8px var(--gl); border-bottom: 1px solid var(--s800); min-width: 0; }
+.band.top { background: var(--s900); padding-block: 10px; }
+.band.tools { background: #1e293be6; border-bottom-color: var(--s700); }
+.band.stamp { background: #0f172af2; }
+.grp { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; min-width: 0; }
+.cap { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--s400); }
+.cap.blue { color: var(--blue-lo); }
+.sep { width: 1px; height: 16px; background: var(--s600); margin-inline: 2px; }
+
+.brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.logo { width: 32px; height: 32px; border-radius: 8px; background: var(--red); display: grid; place-items: center; font: 700 11px/1 var(--mono); letter-spacing: -.02em; flex: none; }
+h1 { margin: 0; font-size: 14px; font-weight: 700; line-height: 1.25; overflow-wrap: anywhere; }
+.brand p { margin: 0; color: var(--s400); }
+.link { font: 600 10px/1 var(--mono); text-transform: uppercase; letter-spacing: .06em; color: var(--emerald-text); border: 1px solid currentColor; border-radius: 99px; padding: 3px 7px; margin-left: 8px; white-space: nowrap; vertical-align: 2px; }
+
+.btn { display: inline-flex; align-items: center; gap: 6px; border-radius: 8px; padding: 6px 10px; font-weight: 500; border: 1px solid var(--s700); background: var(--s800); color: var(--s200); white-space: nowrap; }
+.btn:hover { background: var(--s700); }
+.btn:disabled { opacity: .45; cursor: default; }
+.btn.go { background: var(--emerald); border-color: var(--emerald); color: #fff; font-weight: 600; }
+.btn.go:hover { background: var(--emerald-hi); }
+.btn.spec { background: var(--blue); border-color: var(--blue); color: #fff; font-weight: 600; }
+.btn.spec:hover { background: var(--blue-hi); }
+.btn.send { background: var(--red); border-color: var(--red); color: #fff; font-weight: 700; }
+.btn.send:hover { background: var(--red-hi); }
+.btn.sm { border-radius: 4px; padding: 4px 10px; background: var(--s700); border-color: var(--s600); }
+.btn.sm:hover { background: var(--s600); }
+.btn.danger { background: var(--rose-bg); border-color: var(--rose-line); color: var(--rose-text); }
+.btn.danger:hover { background: #7a1533; }
+select, .field { background: var(--s800); border: 1px solid var(--s700); border-radius: 8px; padding: 6px 10px; color: #fff; min-width: 0; }
+select { max-width: 240px; }
+select:focus, .field:focus, textarea:focus { outline: none; border-color: var(--blue-hi); }
+
+.tool-btn { border-radius: 6px; padding: 6px 10px; background: var(--s700); border: 1px solid var(--s600); color: var(--s200); white-space: nowrap; }
+.tool-btn:hover { background: var(--s600); }
+.tool-btn.active { background: var(--blue); color: #fff; border-color: var(--blue-lo); box-shadow: 0 0 0 2px rgba(59, 130, 246, .35); }
+.color-swatch { width: 24px; height: 24px; border-radius: 50%; border: 1px solid var(--s400); padding: 0; flex: none; }
+.color-swatch.on { border: 2px solid #fff; box-shadow: 0 0 0 2px var(--blue-hi); }
+#custom-color { width: 26px; height: 26px; padding: 0; border: 0; background: transparent; border-radius: 4px; }
+input[type="range"] { width: 80px; accent-color: var(--blue-hi); }
+.chk { display: inline-flex; align-items: center; gap: 6px; color: var(--s200); cursor: pointer; }
+.chk input { accent-color: var(--blue-hi); margin: 0; }
+#cursor-coords { color: var(--amber); background: var(--s800); border: 1px solid var(--s700); border-radius: 4px; padding: 4px 10px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+#zoom-val { color: var(--s300); min-width: 40px; text-align: center; font-variant-numeric: tabular-nums; }
+
+main { flex: 1 1 auto; display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 1fr); gap: 16px; padding: 16px var(--gr) 16px var(--gl); min-height: 0; min-width: 0; }
+.card { display: flex; flex-direction: column; background: var(--s900); border: 1px solid var(--s800); border-radius: 12px; overflow: hidden; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, .3); min-height: 0; min-width: 0; }
+#canvas-wrapper { position: relative; flex: 1 1 auto; min-height: 260px; background-color: var(--s50);
+  background-image: radial-gradient(var(--s300) 1px, transparent 1px); background-size: 16px 16px; overflow: hidden; }
+#paint-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: crosshair; touch-action: none; outline: none; }
+.empty { position: absolute; inset: 16px; border: 2px dashed var(--s500); border-radius: 12px; display: grid; place-content: center; justify-items: center; gap: 8px; text-align: center; padding: 16px; color: var(--s600); }
+.empty b { font-size: 16px; color: var(--s900); }
+.dropveil { position: absolute; inset: 0; z-index: 3; display: grid; place-items: center; background: rgba(37, 99, 235, .18); border: 3px dashed var(--blue); color: var(--s900); font-size: 18px; font-weight: 700; pointer-events: none; }
+.foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 12px; background: var(--s950); border-top: 1px solid var(--s800); padding: 8px 16px; color: var(--s400); }
+#status-toast { color: var(--emerald-text); font-weight: 500; overflow-wrap: anywhere; }
+#status-toast.warn { color: var(--amber); }
+
+.log { padding: 14px; gap: 8px; }
+.log h2 { margin: 0; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--s300); }
+.log .hd { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+#action-count { font: 11px/1.4 var(--mono); background: #1e3a8a99; color: #93c5fd; padding: 2px 8px; border-radius: 99px; white-space: nowrap; }
+.log p { margin: 0; color: var(--s400); }
+.log p strong { color: var(--s200); }
+#redline-log { flex: 1 1 auto; min-height: 120px; overflow-y: auto; margin: 0; padding: 0; list-style: none; background: var(--s950); border: 1px solid var(--s800); border-radius: 8px; }
+#redline-log:empty::after { content: "Your drawn redlines will appear here with exact (X, Y) pixel coordinates. Add a note to any mark to say what should change there."; display: block; padding: 10px; color: var(--s500); font-family: var(--mono); }
+.row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 4px 8px; align-items: start; padding: 8px 8px 9px; border-bottom: 1px solid var(--s800); cursor: pointer; }
+.row.sel { background: #1e3a8a59; }
+.num { min-width: 20px; height: 20px; padding: 0 4px; border-radius: 99px; display: grid; place-items: center; font: 700 11px/1 var(--mono); border: 1.5px solid #fff; font-variant-numeric: tabular-nums; }
+.row .ln { font: 11px/1.45 var(--mono); color: var(--s200); overflow-wrap: anywhere; padding-top: 2px; }
+.row .del { border: 0; background: none; color: var(--s500); border-radius: 4px; padding: 0 5px; font-size: 15px; line-height: 20px; }
+.row .del:hover { color: var(--rose-text); background: var(--s800); }
+.row textarea { grid-column: 2 / 4; }
+textarea { width: 100%; background: var(--s950); border: 1px solid var(--s800); border-radius: 8px; padding: 8px 10px; color: var(--s200); resize: vertical; line-height: 1.4; }
+.row textarea { background: var(--s900); border-color: var(--s700); border-radius: 6px; padding: 5px 8px; min-height: 28px; }
+.log label { font-weight: 500; color: var(--s300); }
+#extra-notes { min-height: 76px; }
+
+.veil { position: fixed; inset: 0; z-index: 20; background: rgba(2, 6, 23, .7); display: grid; place-items: center;
+  padding: max(16px, env(safe-area-inset-top, 0px)) var(--gr) max(16px, env(safe-area-inset-bottom, 0px)) var(--gl); }
+.dlg { width: min(760px, 100%); max-height: 100%; display: flex; flex-direction: column; background: var(--s900); border: 1px solid var(--s700); border-radius: 12px; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, .6); min-width: 0; }
+.dlg header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--s800); }
+.dlg h3 { margin: 0; font-size: 14px; }
+.dlg .body { padding: 14px 16px; overflow-y: auto; display: grid; gap: 14px; min-width: 0; }
+.note { padding: 8px 12px; border-radius: 8px; background: var(--s800); border: 1px solid var(--s700); color: var(--s200); overflow-wrap: anywhere; }
+.note.ok { border-color: var(--emerald-hi); }
+.note.bad { border-color: var(--rose-line); }
+.shots { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(min(220px, 100%), 1fr)); }
+.shot { display: grid; gap: 8px; padding: 8px; border: 1px solid var(--s700); border-radius: 8px; background: var(--s800); min-width: 0; }
+.shot img { max-width: 100%; max-height: 220px; justify-self: center; background: #fff; border: 1px solid var(--s600); }
+#out-spec { min-height: 150px; font: 11px/1.5 var(--mono); }
+.urlrow { display: flex; gap: 8px; }
+.urlrow .field { flex: 1; }
+
+@media (max-width: 1023px) {
+  html, body { height: auto; }
+  main { grid-template-columns: minmax(0, 1fr); }
+  #canvas-wrapper { height: 60vh; min-height: 300px; flex: none; }
+  #redline-log { max-height: 46vh; }
+}
+</style>
+</head>
+<body>
+
+<!-- Top Header Bar -->
+<header class="band top">
+  <div class="brand">
+    <div class="logo" aria-hidden="true">RMS</div>
+    <div>
+      <h1>Redline_markup_studio <span class="link" id="link-badge" hidden>Linked to Claude</span></h1>
+      <p>Drop in any image, draw MS Paint-style redlines on it, then send Claude the marked-up PNG with the exact coordinate spec.</p>
+    </div>
+  </div>
+  <div class="grp">
+    <label for="image-select" style="color:var(--s300);font-weight:500">Image:</label>
+    <select id="image-select" title="Switch between the images you have loaded"></select>
+    <button id="btn-remove-image" type="button" class="btn" title="Remove the current image and its marks">Remove</button>
+    <label class="btn" title="Pick image files from this computer (PNG, JPG, WebP, GIF, SVG)"><span>Add Image/SVG</span><input id="file-upload" type="file" accept="image/*,.svg" multiple hidden></label>
+    <button id="btn-url" type="button" class="btn" title="Load an image from a web address">From URL</button>
+    <button id="btn-export-png" type="button" class="btn go">Download Marked-Up PNG</button>
+    <button id="btn-copy-spec" type="button" class="btn spec">Copy Redline Spec for Chat</button>
+    <button id="btn-send" type="button" class="btn send">Send to Claude</button>
+  </div>
+</header>
+
+<!-- Secondary Toolbar: Paint Tools, Colors, Stroke -->
+<div class="band tools">
+  <div class="grp" id="tool-group">
+    <span class="cap">Tools:</span>
+    <button type="button" data-tool="pen" class="tool-btn active">✏️ Freehand</button>
+    <button type="button" data-tool="line" class="tool-btn">📏 Line / Diagonal</button>
+    <button type="button" data-tool="arrow" class="tool-btn">➡️ Arrow</button>
+    <button type="button" data-tool="circle" class="tool-btn">⭕ Circle</button>
+    <button type="button" data-tool="rect" class="tool-btn">⬜ Box</button>
+    <button type="button" data-tool="cross" class="tool-btn">❌ Red X (Remove)</button>
+    <button type="button" data-tool="text" class="tool-btn">🔤 Text Label</button>
+    <span class="sep"></span>
+    <button type="button" data-tool="select" class="tool-btn" title="Click a mark to select it. Drag to move, drag a corner to resize, Delete to remove.">🖱️ Select / Move</button>
+    <button type="button" data-tool="pan" class="tool-btn" title="Drag to move around a zoomed image (or hold Space with any tool)">✋ Pan</button>
+  </div>
+  <div class="grp">
+    <span class="cap">Color:</span>
+    <button type="button" data-color="#b91c1c" title="Redline Red" aria-label="Redline Red" class="color-swatch on" style="background:#b91c1c"></button>
+    <button type="button" data-color="#2563eb" title="Blue" aria-label="Blue" class="color-swatch" style="background:#2563eb"></button>
+    <button type="button" data-color="#16a34a" title="Green" aria-label="Green" class="color-swatch" style="background:#16a34a"></button>
+    <button type="button" data-color="#eab308" title="Yellow" aria-label="Yellow" class="color-swatch" style="background:#eab308"></button>
+    <button type="button" data-color="#ec297b" title="Callout Pink" aria-label="Callout Pink" class="color-swatch" style="background:#ec297b"></button>
+    <button type="button" data-color="#0f172a" title="Dark Slate" aria-label="Dark Slate" class="color-swatch" style="background:#0f172a"></button>
+    <input id="custom-color" type="color" value="#b91c1c" title="Custom Color" aria-label="Custom color">
+    <label for="stroke-width" style="color:var(--s300)">Size:</label>
+    <input id="stroke-width" type="range" min="1" max="12" value="3">
+    <span id="stroke-width-val" class="mono" style="color:var(--s300);min-width:28px">3px</span>
+    <span class="sep"></span>
+    <button id="btn-undo" type="button" class="btn sm">↩ Undo</button>
+    <button id="btn-redo" type="button" class="btn sm">↪ Redo</button>
+    <button id="btn-clear" type="button" class="btn sm danger">🗑 Clear All</button>
+  </div>
+</div>
+
+<!-- Image intake + view options, Text Stamp String, cursor coordinates -->
+<div class="band stamp">
+  <div class="grp">
+    <span class="cap blue">Add an image: drop it, paste it (Ctrl+V), or drag it from a web page</span>
+    <label class="chk"><input type="checkbox" id="toggle-numbers" checked><span>Number each mark on the image</span></label>
+    <span class="sep"></span>
+    <button id="btn-zoom-out" type="button" class="btn sm" aria-label="Zoom out" title="Zoom out">−</button>
+    <span id="zoom-val" class="mono">100%</span>
+    <button id="btn-zoom-in" type="button" class="btn sm" aria-label="Zoom in" title="Zoom in">+</button>
+    <button id="btn-fit" type="button" class="btn sm" title="Fit the whole image in view">Fit</button>
+  </div>
+  <div class="grp">
+    <label for="text-stamp-input" style="color:var(--s400)">Text Stamp String:</label>
+    <input id="text-stamp-input" class="field" type="text" placeholder="Type label, then click canvas with 🔤 Text tool..." value="Move here" style="width:224px;border-radius:4px;padding:4px 10px">
+    <span id="cursor-coords" class="mono">X: 0, Y: 0</span>
+  </div>
+</div>
+
+<!-- Main Workspace Split: Interactive Canvas (Left) + Live Redline Coordinate Log (Right) -->
+<main>
+  <div class="card">
+    <div id="canvas-wrapper">
+      <canvas id="paint-canvas" tabindex="0" aria-label="Image canvas"></canvas>
+      <div class="empty" id="empty" hidden>
+        <b>Drop an image here</b>
+        <span>or paste one with Ctrl+V, drag one in from a web page, or use Add Image/SVG</span>
+      </div>
+      <div class="dropveil" id="dropveil" hidden>Drop to add this image</div>
+    </div>
+    <div class="foot">
+      <span>Tip: Drag to draw lines, arrows, circles, or Red X's. Every mark records exact pixel coordinates on the right. Scroll to zoom.</span>
+      <span id="status-toast" role="status">Ready.</span>
+    </div>
+  </div>
+
+  <div class="card log">
+    <div class="hd">
+      <h2>Live Redline Coordinate Log</h2>
+      <span id="action-count">0 marks</span>
+    </div>
+    <p id="log-help">Click <strong>Download Marked-Up PNG</strong> and drop the image in chat, and click <strong>Copy Redline Spec</strong> to paste these exact coordinates into chat. <strong>Send to Claude</strong> walks you through both.</p>
+    <ol id="redline-log"></ol>
+    <label for="extra-notes">Additional Written Instructions:</label>
+    <textarea id="extra-notes" rows="4" placeholder="Type any extra instructions here..."></textarea>
+  </div>
+</main>
+
+<div class="veil" id="url-dlg" hidden>
+  <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="url-title" style="width:min(520px,100%)">
+    <header><h3 id="url-title">Load an image from a web address</h3><button class="btn sm" type="button" data-close aria-label="Close">✕</button></header>
+    <div class="body">
+      <form class="urlrow" id="url-form"><input id="url-input" class="field" type="url" placeholder="https://example.com/picture.png" required><button class="btn spec" type="submit">Load</button></form>
+      <div class="note">Tip: you can also drag an image straight from a web page onto the canvas, or right-click it, choose Copy image, and press Ctrl+V here.</div>
+    </div>
+  </div>
+</div>
+
+<div class="veil" id="out-dlg" hidden>
+  <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="out-title">
+    <header><h3 id="out-title">Send to Claude</h3><button class="btn sm" type="button" data-close aria-label="Close">✕</button></header>
+    <div class="body">
+      <div class="note" id="out-status"></div>
+      <div style="display:grid;gap:8px"><span class="cap">Marked-up image</span><div class="shots" id="shots"></div></div>
+      <div style="display:grid;gap:8px"><span class="cap">Redline spec</span>
+        <textarea id="out-spec" readonly></textarea>
+        <div><button class="btn spec" id="btn-copy-spec-2" type="button">Copy Redline Spec for Chat</button></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!--REDLINE_MARKUP_STUDIO_PRELOAD-->
+<script>
+(() => {
+'use strict';
+const APP_NAME = 'Redline_markup_studio';
+const $ = (id) => document.getElementById(id);
+const el = (tag, props = {}, kids = []) => {
+  const n = document.createElement(tag);
+  for (const [k, v] of Object.entries(props)) {
+    if (k === 'class') n.className = v; else if (k === 'text') n.textContent = v;
+    else if (k.startsWith('on')) n.addEventListener(k.slice(2), v); else if (k in n) n[k] = v; else n.setAttribute(k, v);
+  }
+  for (const k of [].concat(kids)) if (k) n.append(k);
+  return n;
+};
+
+const canvas = $('paint-canvas'), ctx = canvas.getContext('2d'), wrapper = $('canvas-wrapper');
+const imageSelect = $('image-select'), statusToast = $('status-toast'), textStampInput = $('text-stamp-input');
+const SEG = new Set(['line', 'arrow']), BOX = new Set(['rect', 'circle', 'cross']);
+const TAG = { pen: 'FREEHAND', line: 'LINE', arrow: 'ARROW', circle: 'CIRCLE', rect: 'BOX', cross: 'REMOVE X', text: 'TEXT' };
+
+let images = [];          // { id, name, img, blob, w, h, actions, undo, redo, view, sample }
+let current = -1;
+let currentTool = 'pen', currentColor = '#b91c1c', currentWidth = 3;
+let selectedId = null, showNumbers = true, spaceDown = false, nextId = 1, bridge = null, seenInbox = 0;
+
+const cur = () => images[current] || null;
+const selected = () => { const s = cur(); return s && s.actions.find(a => a.id === selectedId) || null; };
+/* Marks keep the same visual weight on any image: "3px" is 3px on an 800px-wide image and scales up with larger ones. */
+const scaleOf = (s) => Math.max(1, Math.max(s.w, s.h) / 800);
+const fontPx = (a, s) => Math.max(14, a.width * 5) * scaleOf(s);
+const badgeR = (s) => 9 * scaleOf(s);
+
+function showToast(msg, warn) { statusToast.textContent = msg; statusToast.classList.toggle('warn', !!warn); }
+
+/* ---------- geometry ---------- */
+const mctx = document.createElement('canvas').getContext('2d');
+const FONT = 'Inter, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif';
+function bbox(a, s) {
+  if (a.tool === 'pen') {
+    let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity;
+    for (const p of a.points) { x1 = Math.min(x1, p.x); y1 = Math.min(y1, p.y); x2 = Math.max(x2, p.x); y2 = Math.max(y2, p.y); }
+    return { x: x1, y: y1, w: x2 - x1, h: y2 - y1 };
+  }
+  if (a.tool === 'text') { const px = fontPx(a, s); mctx.font = `bold ${px}px ${FONT}`; return { x: a.x1, y: a.y1 - px * .82, w: mctx.measureText(a.text).width, h: px * 1.05 }; }
+  return { x: Math.min(a.x1, a.x2), y: Math.min(a.y1, a.y2), w: Math.abs(a.x2 - a.x1), h: Math.abs(a.y2 - a.y1) };
+}
+function anchor(a, s) {
+  if (a.tool === 'pen') return [a.points[0].x, a.points[0].y];
+  if (a.tool === 'text') return [a.x1 - badgeR(s) * 1.35, a.y1 - fontPx(a, s) * .34];
+  if (SEG.has(a.tool)) return [a.x1, a.y1];
+  const b = bbox(a, s);
+  if (a.tool === 'circle') return [b.x + b.w / 2 * (1 - .707), b.y + b.h / 2 * (1 - .707)];
+  return [b.x, b.y];
+}
+function lum(hex) { const n = parseInt(hex.slice(1), 16); return (.2126 * (n >> 16 & 255) + .7152 * (n >> 8 & 255) + .0722 * (n & 255)) / 255; }
+const inkOn = (hex) => lum(hex) > .62 ? '#0f172a' : '#ffffff';
+function distSeg(px, py, x1, y1, x2, y2) {
+  const dx = x2 - x1, dy = y2 - y1, l2 = dx * dx + dy * dy, t = l2 ? Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / l2)) : 0;
+  return Math.hypot(px - x1 - t * dx, py - y1 - t * dy);
+}
+function hit(a, s, x, y, tol) {
+  const an = anchor(a, s), b = bbox(a, s), w = a.width * scaleOf(s) / 2 + tol;
+  if (showNumbers && Math.hypot(x - an[0], y - an[1]) <= badgeR(s) + tol / 2) return true;
+  if (a.tool === 'pen') {
+    if (a.points.length < 2) return Math.hypot(x - a.points[0].x, y - a.points[0].y) <= w;
+    for (let i = 1; i < a.points.length; i++) if (distSeg(x, y, a.points[i - 1].x, a.points[i - 1].y, a.points[i].x, a.points[i].y) <= w) return true;
+    return false;
+  }
+  if (SEG.has(a.tool)) return distSeg(x, y, a.x1, a.y1, a.x2, a.y2) <= w;
+  if (a.tool === 'cross') return distSeg(x, y, a.x1, a.y1, a.x2, a.y2) <= w || distSeg(x, y, a.x2, a.y1, a.x1, a.y2) <= w;
+  if (a.tool === 'text') return x >= b.x - tol && x <= b.x + b.w + tol && y >= b.y - tol && y <= b.y + b.h + tol;
+  if (!(x >= b.x - w && x <= b.x + b.w + w && y >= b.y - w && y <= b.y + b.h + w)) return false;
+  if (a.tool === 'circle') { const rx = b.w / 2 || 1, ry = b.h / 2 || 1; return Math.abs(Math.hypot((x - b.x - rx) / rx, (y - b.y - ry) / ry) - 1) * Math.min(rx, ry) <= w; }
+  return !(x > b.x + w && x < b.x + b.w - w && y > b.y + w && y < b.y + b.h - w);
+}
+
+/* ---------- drawing (same shapes as the original studio) ---------- */
+function drawAction(c, act, s) {
+  const k = scaleOf(s);
+  c.save();
+  c.strokeStyle = act.color; c.fillStyle = act.color; c.lineWidth = act.width * k; c.lineCap = 'round'; c.lineJoin = 'round';
+  if (act.tool === 'pen') {
+    c.beginPath();
+    if (act.points.length < 2) { c.arc(act.points[0].x, act.points[0].y, act.width * k / 2, 0, Math.PI * 2); c.fill(); }
+    else { c.moveTo(act.points[0].x, act.points[0].y); for (let i = 1; i < act.points.length; i++) c.lineTo(act.points[i].x, act.points[i].y); c.stroke(); }
+  } else if (act.tool === 'line') {
+    c.beginPath(); c.moveTo(act.x1, act.y1); c.lineTo(act.x2, act.y2); c.stroke();
+  } else if (act.tool === 'arrow') {
+    const headLen = Math.max(12, act.width * 3.5) * k, angle = Math.atan2(act.y2 - act.y1, act.x2 - act.x1);
+    c.beginPath(); c.moveTo(act.x1, act.y1); c.lineTo(act.x2, act.y2); c.stroke();
+    c.beginPath(); c.moveTo(act.x2, act.y2);
+    c.lineTo(act.x2 - headLen * Math.cos(angle - Math.PI / 6), act.y2 - headLen * Math.sin(angle - Math.PI / 6));
+    c.lineTo(act.x2 - headLen * Math.cos(angle + Math.PI / 6), act.y2 - headLen * Math.sin(angle + Math.PI / 6));
+    c.closePath(); c.fill();
+  } else if (act.tool === 'rect') {
+    c.strokeRect(act.x1, act.y1, act.x2 - act.x1, act.y2 - act.y1);
+  } else if (act.tool === 'circle') {
+    c.beginPath(); c.ellipse((act.x1 + act.x2) / 2, (act.y1 + act.y2) / 2, Math.abs(act.x2 - act.x1) / 2, Math.abs(act.y2 - act.y1) / 2, 0, 0, Math.PI * 2); c.stroke();
+  } else if (act.tool === 'cross') {
+    c.beginPath(); c.moveTo(act.x1, act.y1); c.lineTo(act.x2, act.y2); c.moveTo(act.x2, act.y1); c.lineTo(act.x1, act.y2); c.stroke();
+  } else if (act.tool === 'text') {
+    const px = fontPx(act, s); c.font = `bold ${px}px ${FONT}`;
+    c.lineWidth = px / 5; c.strokeStyle = lum(act.color) > .62 ? 'rgba(15,23,42,.8)' : 'rgba(255,255,255,.9)';   // thin halo keeps labels readable on photos
+    c.strokeText(act.text, act.x1, act.y1); c.fillText(act.text, act.x1, act.y1);
+  }
+  c.restore();
+}
+function drawBadge(c, a, s, n) {
+  const r = badgeR(s), [x, y] = anchor(a, s);
+  c.save();
+  c.beginPath(); c.arc(x, y, r, 0, Math.PI * 2); c.fillStyle = a.color; c.fill();
+  c.lineWidth = 1.5 * scaleOf(s); c.strokeStyle = inkOn(a.color); c.stroke();
+  c.fillStyle = inkOn(a.color); c.font = `700 ${r * (n > 99 ? .8 : n > 9 ? 1.02 : 1.25)}px ui-monospace, Menlo, Consolas, monospace`;
+  c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(String(n), x, y + r * .07);
+  c.restore();
+}
+function paintImage(c, s, preview) {
+  c.fillStyle = '#ffffff'; c.fillRect(0, 0, s.w, s.h);
+  c.drawImage(s.img, 0, 0, s.w, s.h);
+  const all = preview ? [...s.actions, preview] : s.actions;
+  all.forEach(a => drawAction(c, a, s));
+  if (showNumbers) all.forEach((a, i) => drawBadge(c, a, s, i + 1));
+}
+
+let raf = 0, pending = null;
+function renderCanvas(preview = null) { pending = preview; if (!raf) raf = requestAnimationFrame(() => { raf = 0; renderNow(pending); }); }
+function renderNow(preview) {
+  const dpr = window.devicePixelRatio || 1, W = wrapper.clientWidth, H = wrapper.clientHeight;
+  if (canvas.width !== Math.round(W * dpr) || canvas.height !== Math.round(H * dpr)) { canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr); }
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H);
+  const s = cur(); $('empty').hidden = !!s;
+  if (!s) { $('zoom-val').textContent = ''; return; }
+  if (s.view.fit) fitView(s);
+  const v = s.view;
+  ctx.save(); ctx.translate(v.ox, v.oy); ctx.scale(v.z, v.z);
+  ctx.shadowColor = 'rgba(15,23,42,.35)'; ctx.shadowBlur = 24 / v.z; ctx.shadowOffsetY = 8 / v.z; ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, s.w, s.h);
+  ctx.shadowColor = 'transparent'; ctx.imageSmoothingQuality = 'high';
+  ctx.beginPath(); ctx.rect(0, 0, s.w, s.h); ctx.clip();
+  paintImage(ctx, s, preview);
+  ctx.restore();
+  const a = selected();
+  if (a) {
+    const b = bbox(a, s), pad = 5;
+    ctx.save(); ctx.setLineDash([5, 4]); ctx.lineWidth = 1.25; ctx.strokeStyle = '#2563eb';
+    ctx.strokeRect(b.x * v.z + v.ox - pad, b.y * v.z + v.oy - pad, b.w * v.z + 2 * pad, b.h * v.z + 2 * pad);
+    ctx.setLineDash([]); ctx.fillStyle = '#fff';
+    for (const h of handles(a)) { ctx.beginPath(); ctx.rect(h.x * v.z + v.ox - 4.5, h.y * v.z + v.oy - 4.5, 9, 9); ctx.fill(); ctx.stroke(); }
+    ctx.restore();
+  }
+  $('zoom-val').textContent = Math.round(v.z * 100) + '%';
+}
+function handles(a) {
+  if (SEG.has(a.tool)) return [{ k: 'p1', x: a.x1, y: a.y1 }, { k: 'p2', x: a.x2, y: a.y2 }];
+  if (BOX.has(a.tool)) return [{ k: '11', x: a.x1, y: a.y1 }, { k: '21', x: a.x2, y: a.y1 }, { k: '12', x: a.x1, y: a.y2 }, { k: '22', x: a.x2, y: a.y2 }];
+  return [];
+}
+function fitView(s) {
+  const W = wrapper.clientWidth, H = wrapper.clientHeight, m = 20;
+  const z = Math.max(.02, Math.min((W - 2 * m) / s.w, (H - 2 * m) / s.h, 4));
+  s.view.z = z; s.view.ox = (W - s.w * z) / 2; s.view.oy = (H - s.h * z) / 2;
+}
+function zoomAt(f, cx, cy) {
+  const s = cur(); if (!s) return; const v = s.view, z = Math.max(.03, Math.min(16, v.z * f)), k = z / v.z;
+  v.ox = cx - (cx - v.ox) * k; v.oy = cy - (cy - v.oy) * k; v.z = z; v.fit = false; renderCanvas();
+}
+
+/* ---------- undo / redo ---------- */
+const snap = (s) => JSON.stringify(s.actions);
+function pushUndo() { const s = cur(); if (!s) return; s.undo.push(snap(s)); if (s.undo.length > 150) s.undo.shift(); s.redo = []; }
+function step(from, to) {
+  const s = cur(); if (!s || !s[from].length) return;
+  s[to].push(snap(s)); s.actions = JSON.parse(s[from].pop());
+  if (!s.actions.some(a => a.id === selectedId)) selectedId = null;
+  refresh();
+}
+
+/* ---------- images in ---------- */
+function decode(blob) {
+  return new Promise((res, rej) => {
+    const url = URL.createObjectURL(blob), img = new Image();
+    img.onload = () => res(img); img.onerror = () => { URL.revokeObjectURL(url); rej(new Error('decode')); }; img.src = url;
+  });
+}
+async function addBlob(blob, name, opts = {}) {
+  if (blob.type === 'application/pdf' || /\.pdf$/i.test(name || '')) { showToast('PDFs are not supported. Save the page as PNG or JPG, or paste a screenshot of it.', true); return null; }
+  let img;
+  try { img = await decode(blob); } catch { showToast(`"${name || 'That file'}" could not be shown as an image. Use PNG, JPG, WebP, GIF or SVG.`, true); return null; }
+  if (!opts.sample) images = images.filter(s => !s.sample);
+  const s = { id: nextId++, name: name || `image-${images.length + 1}.png`, img, blob, w: img.naturalWidth || 800, h: img.naturalHeight || 500,
+    actions: opts.actions || [], undo: [], redo: [], view: { z: 1, ox: 0, oy: 0, fit: true }, sample: !!opts.sample };
+  images.push(s); current = images.length - 1; selectedId = null; refresh();
+  if (!opts.sample) showToast(`Loaded ${s.name} (${s.w}x${s.h})`);
+  return s;
+}
+async function addFiles(files) {
+  let n = 0;
+  for (const f of files) if (f.type.startsWith('image/') || f.type === 'application/pdf' || /\.(png|jpe?g|gif|webp|bmp|svg|avif|pdf)$/i.test(f.name)) { await addBlob(f, f.name); n++; }
+  return n;
+}
+function nameFromUrl(u) { try { return decodeURIComponent(new URL(u).pathname.split('/').pop()) || 'web-image'; } catch { return 'web-image'; } }
+async function addUrl(url) {
+  url = (url || '').trim(); if (!url) return false;
+  try {
+    if (/^(data:image\/|blob:)/i.test(url)) return !!(await addBlob(await (await fetch(url)).blob(), `pasted-${nextId}.png`));
+    if (!/^https?:\/\//i.test(url)) throw new Error('not a web address');
+    showToast('Loading image from the web…');
+    let blob = null;
+    if (bridge) {
+      const r = await api('/api/fetch?url=' + encodeURIComponent(url));
+      if (!r.ok) throw new Error('fetch failed'); blob = await r.blob();
+    } else {
+      try { const r = await fetch(url, { mode: 'cors' }); if (r.ok) { const b = await r.blob(); if (b.type.startsWith('image/')) blob = b; } } catch { /* fall through to <img> */ }
+      if (!blob) blob = await new Promise((res, rej) => {
+        const im = new Image(); im.crossOrigin = 'anonymous';
+        im.onload = () => { const c = document.createElement('canvas'); c.width = im.naturalWidth; c.height = im.naturalHeight; c.getContext('2d').drawImage(im, 0, 0);
+          try { c.toBlob(b => b ? res(b) : rej(new Error('blocked')), 'image/png'); } catch (e) { rej(e); } };
+        im.onerror = () => rej(new Error('blocked')); im.src = url;
+      });
+    }
+    return !!(await addBlob(blob, nameFromUrl(url)));
+  } catch {
+    showToast('That site does not allow loading the image directly. Right-click the image, choose Copy image, then press Ctrl+V here.', true);
+    return false;
+  }
+}
+
+/* ---------- log + spec ---------- */
+function logLine(a) {
+  const c = a.color;
+  if (a.tool === 'pen') { const f = a.points[0], l = a.points[a.points.length - 1]; return `[FREEHAND ${c}] from (${f.x},${f.y}) to (${l.x},${l.y})`; }
+  if (a.tool === 'line') return `[LINE ${c}] (${a.x1},${a.y1}) -> (${a.x2},${a.y2})`;
+  if (a.tool === 'arrow') return `[ARROW ${c}] tail (${a.x1},${a.y1}) -> tip (${a.x2},${a.y2})`;
+  if (a.tool === 'circle') return `[CIRCLE ${c}] center (${Math.round((a.x1 + a.x2) / 2)},${Math.round((a.y1 + a.y2) / 2)}), bbox (${a.x1},${a.y1})-(${a.x2},${a.y2})`;
+  if (a.tool === 'rect') return `[BOX ${c}] (${a.x1},${a.y1}) to (${a.x2},${a.y2})`;
+  if (a.tool === 'cross') return `[REMOVE X ${c}] region (${a.x1},${a.y1}) to (${a.x2},${a.y2})`;
+  return `[TEXT "${a.text}" ${c}] at (${a.x1},${a.y1})`;
+}
+const fileStem = (i) => `image-${i + 1}`;
+function specText() {
+  const lines = [`${APP_NAME} redline spec`, 'Coordinates are image pixels (X right, Y down) from the top-left corner.' + (showNumbers ? ' Each number matches the numbered badge drawn on the marked-up image.' : ''), ''];
+  images.forEach((s, i) => {
+    lines.push(`Image${images.length > 1 ? ` ${i + 1} of ${images.length}` : ''}: ${s.name} (${s.w}x${s.h}) - marked-up file: ${fileStem(i)}-annotated.png`);
+    lines.push('--- Redline Marks ---');
+    if (!s.actions.length) lines.push('(no marks)');
+    s.actions.forEach((a, n) => lines.push(`${n + 1}. ${logLine(a)}${a.note && a.note.trim() ? ` - ${a.note.trim()}` : ''}`));
+    lines.push('');
+  });
+  const notes = $('extra-notes').value.trim();
+  if (notes) lines.push('Notes:', notes, '');
+  return lines.join('\n').trimEnd() + '\n';
+}
+function updateLog() {
+  const s = cur(), list = $('redline-log'); list.replaceChildren();
+  const n = s ? s.actions.length : 0;
+  $('action-count').textContent = `${n} mark${n === 1 ? '' : 's'}`;
+  if (!s) return;
+  s.actions.forEach((a, i) => {
+    const ta = el('textarea', { id: `note-${a.id}`, rows: 1, value: a.note || '', placeholder: 'What should change here? (optional)', 'aria-label': `Note for mark ${i + 1}` });
+    let dirty = false;
+    ta.addEventListener('focus', () => { dirty = false; if (selectedId !== a.id) { selectedId = a.id; markSel(); renderCanvas(); } });
+    ta.addEventListener('input', () => { if (!dirty) { pushUndo(); dirty = true; syncButtons(); } a.note = ta.value; grow(ta); });
+    const num = el('span', { class: 'num', text: String(i + 1) }); num.style.background = a.color; num.style.color = inkOn(a.color);
+    const row = el('li', { class: 'row', 'data-id': a.id }, [num, el('span', { class: 'ln', text: logLine(a) }),
+      el('button', { class: 'del', type: 'button', text: '✕', title: 'Delete this mark', 'aria-label': `Delete mark ${i + 1}`,
+        onclick: (e) => { e.stopPropagation(); pushUndo(); s.actions.splice(s.actions.indexOf(a), 1); if (selectedId === a.id) selectedId = null; refresh(); } }),
+      ta]);
+    row.addEventListener('click', (e) => { if (e.target === ta) return; selectedId = a.id; markSel(); renderCanvas(); });
+    list.append(row); grow(ta);
+  });
+  markSel();
+}
+function grow(ta) { ta.style.height = 'auto'; ta.style.height = Math.min(140, ta.scrollHeight + 2) + 'px'; }
+function markSel(scroll) {
+  for (const r of $('redline-log').children) { const on = Number(r.dataset.id) === selectedId; r.classList.toggle('sel', on); if (on && scroll) r.scrollIntoView({ block: 'nearest' }); }
+}
+function syncButtons() {
+  const s = cur();
+  $('btn-undo').disabled = !s || !s.undo.length; $('btn-redo').disabled = !s || !s.redo.length; $('btn-clear').disabled = !s || !s.actions.length;
+  for (const id of ['btn-export-png', 'btn-copy-spec', 'btn-send', 'btn-remove-image']) $(id).disabled = !s;
+}
+function refresh() {
+  imageSelect.replaceChildren(...images.map((s, i) => el('option', { value: String(i), text: `${i + 1}. ${s.name} (${s.w}x${s.h})`, selected: i === current })));
+  imageSelect.disabled = !images.length;
+  updateLog(); syncButtons(); renderCanvas();
+}
+
+/* ---------- pointer interaction ---------- */
+let drag = null;
+function getCanvasCoords(e) {
+  const r = canvas.getBoundingClientRect(), s = cur(), v = s.view, sx = e.clientX - r.left, sy = e.clientY - r.top;
+  return { x: Math.round(Math.max(0, Math.min(s.w, (sx - v.ox) / v.z))), y: Math.round(Math.max(0, Math.min(s.h, (sy - v.oy) / v.z))), rx: (sx - v.ox) / v.z, ry: (sy - v.oy) / v.z, sx, sy };
+}
+const shape = (tool, x1, y1, x2, y2) => ({ id: nextId++, tool, color: currentColor, width: currentWidth, x1, y1, x2, y2, note: '' });
+canvas.addEventListener('pointerdown', (e) => {
+  const s = cur(); if (!s) return;
+  canvas.focus({ preventScroll: true });
+  const pos = getCanvasCoords(e), v = s.view;
+  if (currentTool === 'pan' || spaceDown || e.button === 1) { drag = { kind: 'pan', sx: pos.sx, sy: pos.sy, ox: v.ox, oy: v.oy }; canvas.style.cursor = 'grabbing'; }
+  else if (e.button !== 0) return;
+  else if (currentTool === 'select') {
+    const tol = 7 / v.z, a0 = selected(), h = a0 && handles(a0).find(h => Math.hypot(h.x - pos.rx, h.y - pos.ry) <= 9 / v.z);
+    if (h) { pushUndo(); drag = { kind: 'resize', a: a0, k: h.k, moved: false }; }
+    else {
+      const a = [...s.actions].reverse().find(a => hit(a, s, pos.rx, pos.ry, tol));
+      selectedId = a ? a.id : null; markSel(true);
+      if (a) { pushUndo(); drag = { kind: 'move', a, x: pos.x, y: pos.y, moved: false }; }
+    }
+  } else if (currentTool === 'text') {
+    const txt = textStampInput.value.trim() || 'Note';
+    pushUndo(); s.actions.push({ id: nextId++, tool: 'text', color: currentColor, width: currentWidth, x1: pos.x, y1: pos.y, text: txt, note: '' });
+    refresh(); showToast(`Stamped text "${txt}" at (${pos.x}, ${pos.y})`); e.preventDefault(); return;
+  } else {
+    selectedId = null;
+    drag = { kind: 'draw', a: currentTool === 'pen' ? { id: nextId++, tool: 'pen', color: currentColor, width: currentWidth, points: [{ x: pos.x, y: pos.y }], note: '' } : shape(currentTool, pos.x, pos.y, pos.x, pos.y) };
+  }
+  if (drag) { try { canvas.setPointerCapture(e.pointerId); } catch { /* synthetic pointer */ } }
+  renderCanvas(drag && drag.kind === 'draw' ? drag.a : null); e.preventDefault();
+});
+canvas.addEventListener('pointermove', (e) => {
+  const s = cur(); if (!s) return; const pos = getCanvasCoords(e);
+  $('cursor-coords').textContent = `X: ${pos.x}, Y: ${pos.y}`;
+  if (!drag) return; const a = drag.a;
+  if (drag.kind === 'pan') { s.view.ox = drag.ox + pos.sx - drag.sx; s.view.oy = drag.oy + pos.sy - drag.sy; s.view.fit = false; renderCanvas(); return; }
+  if (drag.kind === 'draw') {
+    if (a.tool === 'pen') { const l = a.points[a.points.length - 1]; if (l.x !== pos.x || l.y !== pos.y) a.points.push({ x: pos.x, y: pos.y }); }
+    else { a.x2 = pos.x; a.y2 = pos.y; }
+    renderCanvas(a); return;
+  }
+  drag.moved = true;
+  if (drag.kind === 'move') { const dx = pos.x - drag.x, dy = pos.y - drag.y; drag.x = pos.x; drag.y = pos.y; shift(a, dx, dy); }
+  else {
+    if (drag.k === 'p1' || drag.k[0] === '1') a.x1 = pos.x; if (drag.k === 'p2' || drag.k[0] === '2') a.x2 = pos.x;
+    if (drag.k === 'p1' || drag.k[1] === '1') a.y1 = pos.y; if (drag.k === 'p2' || drag.k[1] === '2') a.y2 = pos.y;
+  }
+  renderCanvas();
+});
+function shift(a, dx, dy) {
+  if (a.points) a.points = a.points.map(p => ({ x: p.x + dx, y: p.y + dy }));
+  else { a.x1 += dx; a.y1 += dy; if ('x2' in a) { a.x2 += dx; a.y2 += dy; } }
+}
+function endDrag() {
+  const s = cur(), d = drag; drag = null; if (!s || !d) return;
+  canvas.style.cursor = cursorFor(currentTool);
+  if (d.kind === 'draw') {
+    if (d.a.tool !== 'pen' && d.a.x1 === d.a.x2 && d.a.y1 === d.a.y2) { renderCanvas(); return; }   // a stray click, not a mark
+    pushUndo(); s.actions.push(d.a); refresh(); markSel(true);
+  }
+  else if (d.kind === 'move' || d.kind === 'resize') { if (!d.moved) s.undo.pop(); refresh(); }
+  else renderCanvas();
+}
+canvas.addEventListener('pointerup', endDrag); canvas.addEventListener('pointercancel', endDrag);
+canvas.addEventListener('wheel', (e) => {
+  if (!cur()) return; e.preventDefault(); const r = canvas.getBoundingClientRect();
+  zoomAt(Math.exp(-e.deltaY * (e.ctrlKey ? .01 : .0018)), e.clientX - r.left, e.clientY - r.top);
+}, { passive: false });
+const cursorFor = (t) => t === 'pan' ? 'grab' : t === 'select' ? 'default' : t === 'text' ? 'text' : 'crosshair';
+
+/* ---------- keyboard ---------- */
+const typing = (t) => t && (t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.tagName === 'INPUT' && !['checkbox', 'range', 'color', 'file'].includes(t.type));
+document.addEventListener('keydown', (e) => {
+  if (!$('out-dlg').hidden || !$('url-dlg').hidden) { if (e.key === 'Escape') closeDialogs(); return; }
+  if (typing(e.target)) { if (e.key === 'Escape') { e.target.blur(); canvas.focus(); } return; }
+  const mod = e.ctrlKey || e.metaKey, k = e.key.toLowerCase(), s = cur(), a = selected();
+  if (mod && k === 'z') { e.preventDefault(); e.shiftKey ? step('redo', 'undo') : step('undo', 'redo'); return; }
+  if (mod && k === 'y') { e.preventDefault(); step('redo', 'undo'); return; }
+  if (mod || e.altKey) return;
+  if (e.key === ' ') { spaceDown = true; canvas.style.cursor = 'grab'; e.preventDefault(); return; }
+  if ((e.key === 'Delete' || e.key === 'Backspace') && a) { pushUndo(); s.actions.splice(s.actions.indexOf(a), 1); selectedId = null; refresh(); e.preventDefault(); return; }
+  if (e.key === 'Escape') { selectedId = null; drag = null; refresh(); return; }
+  if (e.key.startsWith('Arrow') && a) {
+    const d = e.shiftKey ? 10 : 1; pushUndo();
+    shift(a, e.key === 'ArrowLeft' ? -d : e.key === 'ArrowRight' ? d : 0, e.key === 'ArrowUp' ? -d : e.key === 'ArrowDown' ? d : 0); refresh(); e.preventDefault();
+  }
+});
+document.addEventListener('keyup', (e) => { if (e.key === ' ') { spaceDown = false; canvas.style.cursor = cursorFor(currentTool); } });
+
+/* ---------- drop + paste ---------- */
+let dragDepth = 0;
+const droppable = (dt) => dt && [...dt.types].some(t => t === 'Files' || t === 'text/uri-list' || t === 'text/html');
+window.addEventListener('dragenter', (e) => { if (droppable(e.dataTransfer)) { dragDepth++; $('dropveil').hidden = false; e.preventDefault(); } });
+window.addEventListener('dragover', (e) => { if (droppable(e.dataTransfer)) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; } });
+window.addEventListener('dragleave', () => { if (--dragDepth <= 0) { dragDepth = 0; $('dropveil').hidden = true; } });
+window.addEventListener('drop', async (e) => {
+  if (!droppable(e.dataTransfer)) return; e.preventDefault(); dragDepth = 0; $('dropveil').hidden = true;
+  const dt = e.dataTransfer, html = dt.getData('text/html'), plain = dt.getData('text/plain');
+  const uri = (dt.getData('text/uri-list') || '').split('\n').map(l => l.trim()).find(l => l && !l.startsWith('#'));
+  if (dt.files && dt.files.length && await addFiles(dt.files)) return;
+  const m = html && html.match(/<img[^>]+src\s*=\s*["']([^"']+)["']/i);
+  const url = (m && m[1].replace(/&amp;/g, '&')) || uri || plain;
+  if (url) await addUrl(url); else showToast('Nothing in that drop looked like an image.', true);
+});
+document.addEventListener('paste', async (e) => {
+  const cd = e.clipboardData; if (!cd) return;
+  const files = [...cd.items].filter(i => i.kind === 'file' && i.type.startsWith('image/')).map(i => i.getAsFile()).filter(Boolean);
+  if (files.length) { e.preventDefault(); for (const f of files) await addBlob(f, f.name && f.name !== 'image.png' ? f.name : `pasted-${nextId}.png`); return; }
+  if (typing(e.target)) return;
+  const text = cd.getData('text/plain').trim();
+  if (/^(https?:\/\/|data:image\/)/i.test(text)) { e.preventDefault(); await addUrl(text); }
+});
+
+/* ---------- export + hand-off ---------- */
+function exportCanvas(s) {
+  const k = Math.min(1, 6000 / Math.max(s.w, s.h)), c = document.createElement('canvas');
+  c.width = Math.round(s.w * k); c.height = Math.round(s.h * k);
+  const x = c.getContext('2d'); x.scale(k, k); x.imageSmoothingQuality = 'high'; paintImage(x, s, null);
+  return c;
+}
+const toBlob = (c) => new Promise((res, rej) => { try { c.toBlob(b => b ? res(b) : rej(new Error('export')), 'image/png'); } catch (e) { rej(e); } });
+const toDataUrl = (b) => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(b); });
+const canSave = () => !!bridge || location.protocol === 'file:' || /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
+function markData(s) {
+  return s.actions.map((a, n) => {
+    const b = bbox(a, s), o = { n: n + 1, tool: a.tool, kind: TAG[a.tool], color: a.color, size: a.width, log: logLine(a), note: (a.note || '').trim(),
+      bbox: { x: Math.round(b.x), y: Math.round(b.y), w: Math.round(b.w), h: Math.round(b.h) } };
+    if (a.points) o.points = a.points; else { o.x1 = a.x1; o.y1 = a.y1; if ('x2' in a) { o.x2 = a.x2; o.y2 = a.y2; } }
+    if (a.tool === 'text') o.text = a.text;
+    return o;
+  });
+}
+let shotUrls = [];
+async function openHandoff(send) {
+  if (!images.length) return;
+  const status = $('out-status'), shots = $('shots'); shots.replaceChildren(); shotUrls.forEach(u => URL.revokeObjectURL(u)); shotUrls = [];
+  status.className = 'note'; status.textContent = 'Rendering…'; $('out-spec').value = specText(); $('out-dlg').hidden = false;
+  const outs = [];
+  try {
+    for (let i = 0; i < images.length; i++) {
+      const s = images[i], blob = await toBlob(exportCanvas(s)), url = URL.createObjectURL(blob);
+      shotUrls.push(url); outs.push({ s, blob });
+      shots.append(el('div', { class: 'shot' }, [
+        el('img', { src: url, alt: `Marked-up ${s.name}`, title: 'Drag this into your Claude chat, or right-click it and choose Copy image' }),
+        el('div', { class: 'grp' }, [el('button', { class: 'btn', type: 'button', text: 'Copy Image', onclick: () => copyImage(blob) }),
+          canSave() ? el('a', { class: 'btn go', href: url, download: `${fileStem(i)}-annotated.png`, text: 'Download PNG' }) : null]),
+        el('span', { class: 'mono', text: `${i + 1}. ${s.name} - ${s.actions.length} mark${s.actions.length === 1 ? '' : 's'}` }),
+      ]));
+    }
+  } catch { status.className = 'note bad'; status.textContent = 'The marked-up image could not be rendered. If the image came from another website, save it to your computer and drop the file in instead.'; return; }
+  if (send && bridge) {
+    status.textContent = 'Sending to Claude…';
+    try {
+      const payload = { app: APP_NAME, spec: specText(), notes: $('extra-notes').value.trim(), numbered: showNumbers, images: [] };
+      for (const o of outs) payload.images.push({ name: o.s.name, width: o.s.w, height: o.s.h, annotated: await toDataUrl(o.blob), original: await toDataUrl(o.s.blob), marks: markData(o.s) });
+      const r = await api('/api/submit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      const j = await r.json(); if (!r.ok) throw new Error(j.error || 'send failed');
+      status.className = 'note ok'; status.textContent = `Sent. Go back to Claude: it now has ${outs.length} marked-up image${outs.length === 1 ? '' : 's'} and the redline spec. Saved in ${j.dir}`;
+      showToast('Sent to Claude.');
+    } catch (e) { status.className = 'note bad'; status.textContent = `Could not reach the local bridge (${e.message}). Copy the image and the redline spec below and paste them into Claude instead.`; }
+  } else {
+    status.textContent = bridge ? 'Preview only. Nothing has been sent yet; press Send to Claude when you are ready.'
+      : 'Put both of these into your Claude chat: copy (or drag) each marked-up image into the message box, then copy and paste the redline spec.';
+  }
+}
+async function copyImage(blob) {
+  try { await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]); $('out-status').textContent = 'Image copied. Paste it (Ctrl+V) into your Claude chat.'; }
+  catch { $('out-status').textContent = 'Copying is blocked here. Right-click the image and choose Copy image, or drag it into the chat.'; }
+}
+async function copySpec(ta) {
+  const text = specText();
+  try { await navigator.clipboard.writeText(text); showToast('Copied Redline Spec to clipboard. Paste (Ctrl+V) into chat!'); if (ta) $('out-status').textContent = 'Redline spec copied. Paste it (Ctrl+V) into your Claude chat.'; }
+  catch { if (!ta) await openHandoff(false); $('out-spec').focus(); $('out-spec').select(); $('out-status').textContent = 'Copying is blocked here. The spec is selected below; press Ctrl+C.'; }
+}
+async function downloadPng() {
+  const s = cur(); if (!s) return;
+  if (!canSave()) { await openHandoff(false); $('out-status').textContent = 'Downloads are blocked in this view. Drag the image below into your Claude chat, or right-click it and choose Copy image.'; return; }
+  try {
+    const url = URL.createObjectURL(await toBlob(exportCanvas(s))), link = el('a', { href: url, download: `${s.name.replace(/\.[a-z0-9]+$/i, '')}_redline_markup.png` });
+    document.body.append(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 4000);
+    showToast('Downloaded annotated PNG. Drag & drop it into the chat!');
+  } catch { showToast('This image cannot be exported. Save it to your computer and drop the file in instead.', true); }
+}
+function closeDialogs() { $('out-dlg').hidden = true; $('url-dlg').hidden = true; }
+for (const v of document.querySelectorAll('.veil')) v.addEventListener('click', (e) => { if (e.target === v || e.target.closest('[data-close]')) closeDialogs(); });
+
+/* ---------- bridge: only active when this page is served by the Redline_markup_studio local helper ---------- */
+const api = (path, opt = {}) => fetch(path, { ...opt, headers: { ...(opt.headers || {}), 'X-Redline-Token': bridge.token } });
+async function initBridge() {
+  const token = new URLSearchParams(location.search).get('t');
+  if (!token || !/^https?:$/.test(location.protocol)) return;
+  try {
+    bridge = { token }; const r = await api('/api/state'); if (!r.ok) throw 0; const j = await r.json(); if (j.app !== APP_NAME) throw 0;
+    $('link-badge').hidden = false; $('link-badge').title = `Send to Claude saves into ${j.project}`;
+    $('log-help').innerHTML = 'Click <strong>Send to Claude</strong> and the marked-up PNG, the original image and these exact coordinates go straight to your Claude session.';
+    await pollInbox(); setInterval(pollInbox, 1500);
+  } catch { bridge = null; }
+}
+let polling = false;
+async function pollInbox() {
+  if (polling || !bridge) return; polling = true;
+  try {
+    const r = await api('/api/inbox?after=' + seenInbox); if (!r.ok) return;
+    for (const it of (await r.json()).items) {
+      seenInbox = Math.max(seenInbox, it.id);
+      const b = await api('/api/inbox/' + it.id); if (b.ok) await addBlob(await b.blob(), it.name);
+    }
+  } catch { /* helper stopped; the studio keeps working standalone */ } finally { polling = false; }
+}
+async function loadPreloaded() {
+  const pre = window.REDLINE_MARKUP_STUDIO_PRELOAD;
+  if (Array.isArray(pre)) for (const p of pre) { try { await addBlob(await (await fetch(p.dataUrl)).blob(), p.name); } catch { /* skip a bad entry */ } }
+}
+
+/* ---------- sample image, so the studio opens in a working state ---------- */
+async function addSample() {
+  const c = document.createElement('canvas'); c.width = 800; c.height = 500; const x = c.getContext('2d');
+  x.fillStyle = '#ffffff'; x.fillRect(0, 0, 800, 500);
+  x.strokeStyle = '#334155'; x.fillStyle = '#334155'; x.lineWidth = 4; x.strokeRect(60, 50, 680, 320);
+  x.lineWidth = 3; x.beginPath(); x.moveTo(290, 50); x.lineTo(290, 220); x.moveTo(290, 280); x.lineTo(290, 370); x.moveTo(520, 50); x.lineTo(520, 160); x.moveTo(520, 220); x.lineTo(520, 370); x.moveTo(60, 220); x.lineTo(220, 220); x.stroke();
+  x.lineWidth = 1.5; x.beginPath(); x.arc(290, 220, 60, 0, Math.PI / 2); x.moveTo(290, 220); x.lineTo(350, 220); x.moveTo(520, 160); x.arc(520, 160, 60, Math.PI / 2, Math.PI); x.moveTo(520, 160); x.lineTo(460, 160); x.stroke();
+  x.setLineDash([8, 5]); x.strokeRect(560, 85, 150, 85); x.setLineDash([]);
+  x.font = '600 14px ui-monospace, Menlo, Consolas, monospace'; x.textAlign = 'center';
+  [['OFFICE 101', 175, 140], ['STORAGE 102', 175, 305], ['OPEN OFFICE 103', 405, 320], ['MEETING 104', 630, 270], ['TABLE', 635, 132]].forEach(([t, px, py]) => x.fillText(t, px, py));
+  x.lineWidth = 1.5; x.strokeRect(60, 400, 680, 60); x.textAlign = 'left'; x.font = '600 15px ui-monospace, Menlo, Consolas, monospace'; x.fillText('SAMPLE IMAGE', 76, 426);
+  x.font = '12px ui-monospace, Menlo, Consolas, monospace'; x.fillText('Example only. Drop, paste or add your own image to replace it.', 76, 446);
+  const id = () => nextId++;
+  const actions = [
+    { id: id(), tool: 'circle', color: '#b91c1c', width: 3, x1: 262, y1: 190, x2: 372, y2: 300, note: 'Example note: move this door 600 mm toward the top wall.' },
+    { id: id(), tool: 'arrow', color: '#2563eb', width: 3, x1: 640, y1: 330, x2: 636, y2: 182, note: 'Example note: make the table outline solid, not dashed.' },
+    { id: id(), tool: 'cross', color: '#b91c1c', width: 3, x1: 100, y1: 200, x2: 180, y2: 240, note: 'Example note: delete this wall.' },
+    { id: id(), tool: 'text', color: '#b91c1c', width: 3, x1: 392, y1: 120, text: 'Move here', note: '' },
+  ];
+  await addBlob(await toBlob(c), 'sample-image.png', { sample: true, actions });
+  showToast('Ready. A sample image is loaded; add your own to replace it.');
+}
+
+/* ---------- wiring ---------- */
+document.querySelectorAll('.tool-btn').forEach((btn) => btn.addEventListener('click', () => {
+  document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active')); btn.classList.add('active');
+  currentTool = btn.getAttribute('data-tool'); canvas.style.cursor = cursorFor(currentTool);
+  if (currentTool !== 'select') { selectedId = null; markSel(); renderCanvas(); }
+  showToast(`Active tool: ${btn.textContent.trim()}`);
+}));
+function setColor(c) {
+  currentColor = c; $('custom-color').value = c;
+  document.querySelectorAll('.color-swatch').forEach(s => s.classList.toggle('on', s.getAttribute('data-color') === c));
+  const a = selected(); if (a && a.color !== c) { pushUndo(); a.color = c; refresh(); }
+}
+document.querySelectorAll('.color-swatch').forEach((sw) => sw.addEventListener('click', () => setColor(sw.getAttribute('data-color'))));
+$('custom-color').addEventListener('input', (e) => setColor(e.target.value));
+$('stroke-width').addEventListener('input', (e) => {
+  currentWidth = parseInt(e.target.value, 10) || 3; $('stroke-width-val').textContent = `${currentWidth}px`;
+  const a = selected(); if (a && a.width !== currentWidth) { pushUndo(); a.width = currentWidth; refresh(); }
+});
+$('btn-undo').addEventListener('click', () => step('undo', 'redo'));
+$('btn-redo').addEventListener('click', () => step('redo', 'undo'));
+$('btn-clear').addEventListener('click', () => { const s = cur(); if (!s || !s.actions.length) return; pushUndo(); s.actions = []; selectedId = null; refresh(); showToast('Cleared all redline annotations. Undo brings them back.'); });
+imageSelect.addEventListener('change', (e) => { current = Number(e.target.value); selectedId = null; refresh(); showToast(`Showing ${cur().name}`); });
+$('btn-remove-image').addEventListener('click', () => { const s = cur(); if (!s) return; images.splice(current, 1); current = Math.min(current, images.length - 1); selectedId = null; refresh(); showToast(`Removed ${s.name}`); });
+$('file-upload').addEventListener('change', async (e) => { await addFiles(e.target.files); e.target.value = ''; });
+$('btn-url').addEventListener('click', () => { $('url-dlg').hidden = false; setTimeout(() => $('url-input').focus(), 0); });
+$('url-form').addEventListener('submit', async (e) => { e.preventDefault(); const i = $('url-input'), v = i.value; closeDialogs(); if (await addUrl(v)) i.value = ''; });
+$('toggle-numbers').addEventListener('change', (e) => { showNumbers = e.target.checked; renderCanvas(); });
+$('btn-zoom-in').addEventListener('click', () => zoomAt(1.25, wrapper.clientWidth / 2, wrapper.clientHeight / 2));
+$('btn-zoom-out').addEventListener('click', () => zoomAt(.8, wrapper.clientWidth / 2, wrapper.clientHeight / 2));
+$('btn-fit').addEventListener('click', () => { const s = cur(); if (s) { s.view.fit = true; renderCanvas(); } });
+$('btn-export-png').addEventListener('click', downloadPng);
+$('btn-copy-spec').addEventListener('click', () => copySpec(false));
+$('btn-copy-spec-2').addEventListener('click', () => copySpec(true));
+$('btn-send').addEventListener('click', () => openHandoff(true));
+new ResizeObserver(() => renderCanvas()).observe(wrapper);
+
+refresh();
+(async () => { await initBridge(); await loadPreloaded(); if (!images.length) await addSample(); })();
+})();
+</script>
+</body>
+</html>

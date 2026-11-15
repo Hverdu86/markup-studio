@@ -8,14 +8,15 @@ It is a Claude **plugin** that carries one **skill**. The same skill also upload
 
 ## What you get
 
-- **Any image in.** Drop a file from your computer, drag an image straight off a web page, paste with Ctrl+V, type a web address, or let Claude load an image it just made.
+- **Any image or PDF in.** Drop a file from your computer, drag an image straight off a web page, paste with Ctrl+V, type a web address, or let Claude load an image it just made. Opens PNG, JPG, GIF, WebP, BMP, SVG, AVIF, ICO, TIFF, HEIC photos and PDF. Each PDF page becomes its own image; long PDFs ask which pages you want.
+- **Save your work.** Save Marked-Up File writes the result to your computer as a PNG, JPG or PDF (one page, or every image as a page). Where the browser supports it you get a normal Save As dialog.
 - **The original markup tools.** Freehand, Line / Diagonal, Arrow, Circle, Box, Red X (Remove) and Text Label, six colour swatches plus a custom colour, sizes 1-12, Undo, Redo and Clear All.
 - **A live coordinate log.** Every mark gets a numbered line with exact pixel coordinates, and the same number is drawn as a badge on the image. Add a note to any mark to say what should change there.
 - **One-click hand-off.** In Claude Code, **Send to Claude** saves the marked-up PNG, the clean original and the spec into your project and Claude picks them up. Anywhere else, copy or download the image and copy the spec into the chat.
 - **Fix one mark without undoing the rest.** Pick Select, click any mark on the image (or its line in the log), then Delete Selected. Drag a selected mark to move it.
 - **Mouse shortcuts with any tool.** Shift + left drag pans, Ctrl + left click selects a mark, Backspace or Del removes it, the scroll wheel zooms.
 - **Extras.** Several images at once, zoom buttons and Fit.
-- **Private.** The studio loads nothing from the internet. In Claude Code the helper listens on `127.0.0.1` only and writes to `.redline_markup_studio/` inside your project (ignored by git).
+- **Private.** Your files never leave the page. In Claude Code the helper listens on `127.0.0.1` only and writes to `.redline_markup_studio/` inside your project (ignored by git). The PDF and TIFF decoders ship with the plugin, so those work offline; the HEIC decoder, and the PDF and TIFF decoders when the page is used as a lone file, are fetched from a public CDN the first time such a file is opened.
 
 ## Install in Claude Code
 
@@ -40,7 +41,7 @@ Skills are added per account; on Team and Enterprise plans an owner can provisio
 
 ## Use it with no install
 
-Open [`skills/redline-markup-studio/assets/Redline_markup_studio.html`](skills/redline-markup-studio/assets/Redline_markup_studio.html) in a browser. Mark up an image, then attach the downloaded PNG and paste the copied spec into any Claude conversation.
+Open [`skills/redline-markup-studio/assets/Redline_markup_studio.html`](skills/redline-markup-studio/assets/Redline_markup_studio.html) in a browser. Mark up an image or PDF, then attach the saved file and paste the copied spec into any Claude conversation.
 
 ## How the Claude Code link works
 
@@ -78,7 +79,8 @@ Keep everything else exactly as it is.
 ```
 .claude-plugin/plugin.json        plugin manifest
 .claude-plugin/marketplace.json   lets this repository act as its own marketplace
-skills/redline-markup-studio/     the skill: SKILL.md, the studio page, the helper scripts
+skills/redline-markup-studio/     the skill: SKILL.md, the studio page, the helper scripts,
+                                  and assets/vendor/ (bundled PDF and TIFF decoders with their licences)
 dist/redline-markup-studio.zip    the same skill packaged for claude.ai
 ```
 

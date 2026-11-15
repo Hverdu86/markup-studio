@@ -137,16 +137,16 @@ textarea { width: 100%; background: var(--s950); border: 1px solid var(--s800); 
     <div class="logo" aria-hidden="true">RMS</div>
     <div>
       <h1>Redline_markup_studio <span class="link" id="link-badge" hidden>Linked to Claude</span></h1>
-      <p>Drop in any image, draw MS Paint-style redlines on it, then send Claude the marked-up PNG with the exact coordinate spec.</p>
+      <p>Drop in any image or PDF, draw MS Paint-style redlines on it, then save it or send Claude the marked-up result with the exact coordinate spec.</p>
     </div>
   </div>
   <div class="grp">
     <label for="image-select" style="color:var(--s300);font-weight:500">Image:</label>
     <select id="image-select" title="Switch between the images you have loaded"></select>
     <button id="btn-remove-image" type="button" class="btn" title="Remove the current image and its marks">Remove</button>
-    <label class="btn" title="Pick image files from this computer (PNG, JPG, WebP, GIF, SVG)"><span>Add Image/SVG</span><input id="file-upload" type="file" accept="image/*,.svg" multiple hidden></label>
+    <label class="btn" title="Pick files from this computer: PNG, JPG, GIF, WebP, BMP, SVG, AVIF, TIFF, HEIC photos, or a PDF"><span>Add Image/PDF</span><input id="file-upload" type="file" accept="image/*,.svg,.pdf,.tif,.tiff,.heic,.heif,application/pdf" multiple hidden></label>
     <button id="btn-url" type="button" class="btn" title="Load an image from a web address">From URL</button>
-    <button id="btn-export-png" type="button" class="btn go">Download Marked-Up PNG</button>
+    <button id="btn-save" type="button" class="btn go" title="Save the marked-up result to this computer as a PNG, JPG or PDF">Save Marked-Up File</button>
     <button id="btn-copy-spec" type="button" class="btn spec">Copy Redline Spec for Chat</button>
     <button id="btn-send" type="button" class="btn send">Send to Claude</button>
   </div>
@@ -189,7 +189,7 @@ textarea { width: 100%; background: var(--s950); border: 1px solid var(--s800); 
 <!-- Image intake + view options, Text Stamp String, cursor coordinates -->
 <div class="band stamp">
   <div class="grp">
-    <span class="cap blue">Add an image: drop it, paste it (Ctrl+V), or drag it from a web page</span>
+    <span class="cap blue">Add an image or PDF: drop it, paste it (Ctrl+V), or drag it from a web page</span>
     <label class="chk"><input type="checkbox" id="toggle-numbers" checked><span>Number each mark on the image</span></label>
     <span class="sep"></span>
     <button id="btn-zoom-out" type="button" class="btn sm" aria-label="Zoom out" title="Zoom out">−</button>
@@ -211,8 +211,8 @@ textarea { width: 100%; background: var(--s950); border: 1px solid var(--s800); 
     <div id="canvas-wrapper">
       <canvas id="paint-canvas" tabindex="0" aria-label="Image canvas"></canvas>
       <div class="empty" id="empty" hidden>
-        <b>Drop an image here</b>
-        <span>or paste one with Ctrl+V, drag one in from a web page, or use Add Image/SVG</span>
+        <b>Drop an image or PDF here</b>
+        <span>or paste one with Ctrl+V, drag one in from a web page, or use Add Image/PDF</span>
       </div>
       <div class="dropveil" id="dropveil" hidden>Drop to add this image</div>
     </div>
@@ -227,7 +227,7 @@ textarea { width: 100%; background: var(--s950); border: 1px solid var(--s800); 
       <h2>Live Redline Coordinate Log</h2>
       <span id="action-count">0 marks</span>
     </div>
-    <p id="log-help">Click <strong>Download Marked-Up PNG</strong> and drop the image in chat, and click <strong>Copy Redline Spec</strong> to paste these exact coordinates into chat. <strong>Send to Claude</strong> walks you through both.</p>
+    <p id="log-help">Click <strong>Save Marked-Up File</strong> and drop the image in chat, and click <strong>Copy Redline Spec</strong> to paste these exact coordinates into chat. <strong>Send to Claude</strong> walks you through both.</p>
     <ol id="redline-log"></ol>
     <label for="extra-notes">Additional Written Instructions:</label>
     <textarea id="extra-notes" rows="4" placeholder="Type any extra instructions here..."></textarea>
@@ -241,6 +241,33 @@ textarea { width: 100%; background: var(--s950); border: 1px solid var(--s800); 
       <form class="urlrow" id="url-form"><input id="url-input" class="field" type="url" placeholder="https://example.com/picture.png" required><button class="btn spec" type="submit">Load</button></form>
       <div class="note">Tip: you can also drag an image straight from a web page onto the canvas, or right-click it, choose Copy image, and press Ctrl+V here.</div>
     </div>
+  </div>
+</div>
+
+<div class="veil" id="save-dlg" hidden>
+  <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="save-title" style="width:min(520px,100%)">
+    <header><h3 id="save-title">Save Marked-Up File</h3><button class="btn sm" type="button" data-close aria-label="Close">✕</button></header>
+    <form class="body" id="save-form">
+      <div style="display:grid;gap:6px"><label class="cap" for="save-name">File name</label><input id="save-name" class="field" type="text" autocomplete="off" required></div>
+      <div style="display:grid;gap:8px"><span class="cap">Save as</span>
+        <label class="chk"><input type="radio" name="save-format" id="save-png" value="png" checked><span>PNG image, sharpest lines and text (the image you are looking at)</span></label>
+        <label class="chk"><input type="radio" name="save-format" id="save-jpg" value="jpg"><span>JPG image, smaller file (the image you are looking at)</span></label>
+        <label class="chk"><input type="radio" name="save-format" id="save-pdf1" value="pdf1"><span>PDF document, one page (the image you are looking at)</span></label>
+        <label class="chk" id="save-pdf-row"><input type="radio" name="save-format" id="save-pdf" value="pdf"><span id="save-pdf-label">PDF document</span></label>
+      </div>
+      <div class="note" id="save-status">Your marks are drawn into the saved file. The original file is not changed.</div>
+      <div><button class="btn go" id="btn-save-go" type="submit">Save</button></div>
+    </form>
+  </div>
+</div>
+
+<div class="veil" id="pages-dlg" hidden>
+  <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="pages-title" style="width:min(520px,100%)">
+    <header><h3 id="pages-title">Which pages?</h3><button class="btn sm" type="button" data-close aria-label="Close">✕</button></header>
+    <form class="body" id="pages-form">
+      <div class="note" id="pages-note"></div>
+      <div class="urlrow"><input id="pages-input" class="field" type="text" autocomplete="off" required aria-label="Pages to open"><button class="btn spec" type="submit">Open pages</button></div>
+    </form>
   </div>
 </div>
 
@@ -442,21 +469,126 @@ function decode(blob) {
     img.onload = () => res(img); img.onerror = () => { URL.revokeObjectURL(url); rej(new Error('decode')); }; img.src = url;
   });
 }
-async function addBlob(blob, name, opts = {}) {
-  if (blob.type === 'application/pdf' || /\.pdf$/i.test(name || '')) { showToast('PDFs are not supported. Save the page as PNG or JPG, or paste a screenshot of it.', true); return null; }
+/* Decoders for formats browsers cannot open themselves. Each loads only when such a file arrives:
+   first from the vendor folder shipped beside this page, then from a public CDN. The file itself never leaves this page. */
+const LIBS = {
+  pdf: { global: 'pdfjsLib', urls: ['vendor/pdf.min.js', 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js'] },
+  pako: { global: 'pako', urls: ['vendor/pako_inflate.min.js', 'https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako_inflate.min.js'] },
+  tiff: { global: 'UTIF', urls: ['vendor/UTIF.js', 'https://cdn.jsdelivr.net/npm/utif@3.1.0/UTIF.js'] },
+  heic: { global: 'heic2any', urls: ['https://cdnjs.cloudflare.com/ajax/libs/heic2any/0.0.4/heic2any.min.js'] },
+};
+const libCache = {};
+function lib(name) {
+  return libCache[name] || (libCache[name] = (async () => {
+    const L = LIBS[name];
+    for (const url of L.urls) {
+      if (window[L.global]) break;
+      try { await new Promise((res, rej) => document.head.append(el('script', { src: url, onload: res, onerror: rej }))); L.from = url; } catch { /* try the next source */ }
+    }
+    if (!window[L.global]) { delete libCache[name]; throw new Error('decoder'); }
+    if (name === 'pdf') window.pdfjsLib.GlobalWorkerOptions.workerSrc = L.from.replace('pdf.min.js', 'pdf.worker.min.js');
+    return window[L.global];
+  })());
+}
+async function sniff(blob, name) {   // trust the bytes, not the file extension
+  const b = new Uint8Array(await blob.slice(0, 16).arrayBuffer()), str = String.fromCharCode(...b);
+  if (str.startsWith('%PDF')) return 'pdf';
+  if (str.startsWith('II*\0') || str.startsWith('MM\0*')) return 'tiff';
+  if (str.slice(4, 8) === 'ftyp' && /^(heic|heix|hevc|hevx|heim|heis|hevm|hevs|mif1|msf1)$/.test(str.slice(8, 12))) return 'heic';
+  if (!b.length && /\.pdf$/i.test(name || '')) return 'pdf';
+  return '';
+}
+const stemOf = (name) => String(name || 'image').replace(/\.[a-z0-9]+$/i, '');
+async function addRaster(blob, name, opts = {}) {
   let img;
-  try { img = await decode(blob); } catch { showToast(`"${name || 'That file'}" could not be shown as an image. Use PNG, JPG, WebP, GIF or SVG.`, true); return null; }
+  try { img = await decode(blob); } catch { return null; }
   if (!opts.sample) images = images.filter(s => !s.sample);
-  const s = { id: nextId++, name: name || `image-${images.length + 1}.png`, img, blob, w: img.naturalWidth || 800, h: img.naturalHeight || 500,
+  const s = { id: nextId++, name: name || `image-${images.length + 1}.png`, img, blob, w: img.naturalWidth || 800, h: img.naturalHeight || 500, pt: opts.pt || null,
     actions: opts.actions || [], undo: [], redo: [], view: { z: 1, ox: 0, oy: 0, fit: true }, sample: !!opts.sample };
   images.push(s); current = images.length - 1; selectedId = null; refresh();
-  if (!opts.sample) showToast(`Loaded ${s.name} (${s.w}x${s.h})`);
+  if (!opts.sample && !opts.quiet) showToast(`Loaded ${s.name} (${s.w}x${s.h})`);
   return s;
 }
+async function addBlob(blob, name, opts = {}) {
+  const label = name || 'That file';
+  try {
+    const kind = await sniff(blob, name);
+    if (kind === 'pdf') return await addPdf(blob, name || 'document.pdf');
+    if (kind === 'tiff') return await addTiff(blob, name || 'image.tif');
+    if (kind === 'heic') {
+      showToast(`Converting ${label}…`);
+      const out = [].concat(await (await lib('heic'))({ blob, toType: 'image/png' }));
+      let s = null; for (let i = 0; i < out.length; i++) s = await addRaster(out[i], `${stemOf(name)}${out.length > 1 ? `-${i + 1}` : ''}.png`) || s;
+      return s;
+    }
+  } catch (e) {
+    showToast(e && e.message === 'decoder' ? `Opening ${label} needs a decoder that could not be loaded. Check the internet connection and try again.`
+      : e && e.name === 'PasswordException' ? `${label} is password-protected. Remove the password, then drop it in again.`
+      : `${label} could not be opened. The file may be damaged.`, true);
+    return null;
+  }
+  const s = await addRaster(blob, name, opts);
+  if (!s) showToast(`${label} is not a picture this studio can open. Use PNG, JPG, GIF, WebP, BMP, SVG, AVIF, TIFF, HEIC or PDF.`, true);
+  return s;
+}
+/* A PDF becomes one image per page, rendered sharp enough to mark up fine detail. */
+async function addPdf(blob, name) {
+  showToast(`Opening ${name}…`);
+  const pdfjs = await lib('pdf'), doc = await pdfjs.getDocument({ data: await blob.arrayBuffer() }).promise;
+  let pages = Array.from({ length: doc.numPages }, (_, i) => i + 1);
+  if (pages.length > 12) { pages = await askPages(name, doc.numPages); if (!pages) { showToast(`Did not open ${name}.`); return null; } }
+  let last = null;
+  for (const n of pages) {
+    showToast(`Rendering ${name}, page ${n} of ${doc.numPages}…`);
+    const page = await doc.getPage(n), base = page.getViewport({ scale: 1 });
+    const vp = page.getViewport({ scale: Math.max(1, Math.min(3, 3000 / Math.max(base.width, base.height))) });
+    const c = document.createElement('canvas'); c.width = Math.round(vp.width); c.height = Math.round(vp.height);
+    const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height);
+    await page.render({ canvasContext: x, viewport: vp }).promise;
+    last = await addRaster(await toBlob(c), `${stemOf(name)}${doc.numPages > 1 ? `-page-${n}` : ''}.png`, { quiet: true, pt: { w: base.width, h: base.height } }) || last;
+  }
+  if (last && pages.length > 1) { current = images.length - pages.length; refresh(); }
+  if (last) showToast(`Loaded ${name}: ${pages.length} page${pages.length === 1 ? '' : 's'}${pages.length > 1 ? '. Switch pages with the Image menu.' : '.'}`);
+  return last;
+}
+async function addTiff(blob, name) {
+  showToast(`Opening ${name}…`);
+  await lib('pako'); const UTIF = await lib('tiff'), buf = await blob.arrayBuffer();
+  const ifds = UTIF.decode(buf).filter(d => d.t256 && d.t257).slice(0, 12);
+  let last = null;
+  for (let i = 0; i < ifds.length; i++) {
+    UTIF.decodeImage(buf, ifds[i]);
+    const rgba = UTIF.toRGBA8(ifds[i]), c = document.createElement('canvas'); c.width = ifds[i].width; c.height = ifds[i].height;
+    c.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(rgba.buffer, rgba.byteOffset, rgba.length), c.width, c.height), 0, 0);
+    last = await addRaster(await toBlob(c), `${stemOf(name)}${ifds.length > 1 ? `-page-${i + 1}` : ''}.png`) || last;
+  }
+  if (!last) throw new Error('empty');
+  return last;
+}
+let pagesDone = null;
+function parsePages(text, max) {
+  const out = [];
+  for (const part of String(text).split(/[,;\s]+/).filter(Boolean)) {
+    const m = /^(\d+)(?:\s*-\s*(\d+))?$/.exec(part); if (!m) return null;
+    const a = +m[1], b = m[2] ? +m[2] : a; if (a < 1 || b < a || b > max) return null;
+    for (let n = a; n <= b; n++) if (!out.includes(n)) out.push(n);
+  }
+  return out.length && out.length <= 40 ? out : null;
+}
+function askPages(name, total) {
+  return new Promise((resolve) => {
+    $('pages-note').className = 'note'; $('pages-note').textContent = `${name} has ${total} pages. Type the pages to mark up, for example 1-5, 8 (up to 40 at a time).`;
+    $('pages-input').value = '1-12'; $('pages-dlg').hidden = false; setTimeout(() => $('pages-input').select(), 0);
+    pagesDone = (pages) => { pagesDone = null; $('pages-dlg').hidden = true; resolve(pages); };
+    $('pages-form').onsubmit = (e) => {
+      e.preventDefault(); const pages = parsePages($('pages-input').value, total);
+      if (pages) pagesDone(pages); else { $('pages-note').className = 'note bad'; $('pages-note').textContent = `Use page numbers from 1 to ${total}, such as 1-5, 8. Up to 40 pages at a time.`; }
+    };
+  });
+}
 async function addFiles(files) {
-  let n = 0;
-  for (const f of files) if (f.type.startsWith('image/') || f.type === 'application/pdf' || /\.(png|jpe?g|gif|webp|bmp|svg|avif|pdf)$/i.test(f.name)) { await addBlob(f, f.name); n++; }
-  return n;
+  for (const f of files) await addBlob(f, f.name);
+  return files.length;
 }
 function nameFromUrl(u) { try { return decodeURIComponent(new URL(u).pathname.split('/').pop()) || 'web-image'; } catch { return 'web-image'; } }
 async function addUrl(url) {
@@ -470,7 +602,7 @@ async function addUrl(url) {
       const r = await api('/api/fetch?url=' + encodeURIComponent(url));
       if (!r.ok) throw new Error('fetch failed'); blob = await r.blob();
     } else {
-      try { const r = await fetch(url, { mode: 'cors' }); if (r.ok) { const b = await r.blob(); if (b.type.startsWith('image/')) blob = b; } } catch { /* fall through to <img> */ }
+      try { const r = await fetch(url, { mode: 'cors' }); if (r.ok) { const b = await r.blob(); if (b.type.startsWith('image/') || b.type === 'application/pdf') blob = b; } } catch { /* fall through to <img> */ }
       if (!blob) blob = await new Promise((res, rej) => {
         const im = new Image(); im.crossOrigin = 'anonymous';
         im.onload = () => { const c = document.createElement('canvas'); c.width = im.naturalWidth; c.height = im.naturalHeight; c.getContext('2d').drawImage(im, 0, 0);
@@ -552,7 +684,7 @@ function deleteSelected() {
 function syncButtons() {
   const s = cur();
   $('btn-undo').disabled = !s || !s.undo.length; $('btn-redo').disabled = !s || !s.redo.length; $('btn-clear').disabled = !s || !s.actions.length;
-  for (const id of ['btn-export-png', 'btn-copy-spec', 'btn-send', 'btn-remove-image']) $(id).disabled = !s;
+  for (const id of ['btn-save', 'btn-copy-spec', 'btn-send', 'btn-remove-image']) $(id).disabled = !s;
 }
 function refresh() {
   imageSelect.replaceChildren(...images.map((s, i) => el('option', { value: String(i), text: `${i + 1}. ${s.name} (${s.w}x${s.h})`, selected: i === current })));
@@ -637,7 +769,7 @@ const cursorFor = (t) => t === 'pan' ? 'grab' : t === 'select' ? 'default' : t =
 /* ---------- keyboard ---------- */
 const typing = (t) => t && (t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.tagName === 'INPUT' && !['checkbox', 'range', 'color', 'file'].includes(t.type));
 document.addEventListener('keydown', (e) => {
-  if (!$('out-dlg').hidden || !$('url-dlg').hidden) { if (e.key === 'Escape') closeDialogs(); return; }
+  if (document.querySelector('.veil:not([hidden])')) { if (e.key === 'Escape') closeDialogs(); return; }
   if (typing(e.target)) { if (e.key === 'Escape') { e.target.blur(); canvas.focus({ preventScroll: true }); } return; }
   const mod = e.ctrlKey || e.metaKey, k = e.key.toLowerCase(), s = cur(), a = selected();
   if (mod && k === 'z') { e.preventDefault(); e.shiftKey ? step('redo', 'undo') : step('undo', 'redo'); return; }
@@ -675,7 +807,7 @@ window.addEventListener('drop', async (e) => {
 });
 document.addEventListener('paste', async (e) => {
   const cd = e.clipboardData; if (!cd) return;
-  const files = [...cd.items].filter(i => i.kind === 'file' && i.type.startsWith('image/')).map(i => i.getAsFile()).filter(Boolean);
+  const files = [...cd.items].filter(i => i.kind === 'file').map(i => i.getAsFile()).filter(Boolean);
   if (files.length) { e.preventDefault(); for (const f of files) await addBlob(f, f.name && f.name !== 'image.png' ? f.name : `pasted-${nextId}.png`); return; }
   if (typing(e.target)) return;
   const text = cd.getData('text/plain').trim();
@@ -689,7 +821,7 @@ function exportCanvas(s) {
   const x = c.getContext('2d'); x.scale(k, k); x.imageSmoothingQuality = 'high'; paintImage(x, s, null);
   return c;
 }
-const toBlob = (c) => new Promise((res, rej) => { try { c.toBlob(b => b ? res(b) : rej(new Error('export')), 'image/png'); } catch (e) { rej(e); } });
+const toBlob = (c, type = 'image/png', q) => new Promise((res, rej) => { try { c.toBlob(b => b ? res(b) : rej(new Error('export')), type, q); } catch (e) { rej(e); } });
 const toDataUrl = (b) => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(b); });
 const canSave = () => !!bridge || location.protocol === 'file:' || /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
 function markData(s) {
@@ -714,7 +846,9 @@ async function openHandoff(send) {
       shots.append(el('div', { class: 'shot' }, [
         el('img', { src: url, alt: `Marked-up ${s.name}`, title: 'Drag this into your Claude chat, or right-click it and choose Copy image' }),
         el('div', { class: 'grp' }, [el('button', { class: 'btn', type: 'button', text: 'Copy Image', onclick: () => copyImage(blob) }),
-          canSave() ? el('a', { class: 'btn go', href: url, download: `${fileStem(i)}-annotated.png`, text: 'Download PNG' }) : null]),
+          el('button', { class: 'btn go', type: 'button', text: 'Save PNG', onclick: async () => {
+            try { const h = await pickTarget(`${fileStem(i)}-annotated.png`, 'png'); $('out-status').textContent = await writeOut(h, blob, `${fileStem(i)}-annotated.png`); }
+            catch (e) { $('out-status').textContent = saveError(e); } } })]),
         el('span', { class: 'mono', text: `${i + 1}. ${s.name} - ${s.actions.length} mark${s.actions.length === 1 ? '' : 's'}` }),
       ]));
     }
@@ -743,16 +877,75 @@ async function copySpec(ta) {
   try { await navigator.clipboard.writeText(text); showToast('Copied Redline Spec to clipboard. Paste (Ctrl+V) into chat!'); if (ta) $('out-status').textContent = 'Redline spec copied. Paste it (Ctrl+V) into your Claude chat.'; }
   catch { if (!ta) await openHandoff(false); $('out-spec').focus(); $('out-spec').select(); $('out-status').textContent = 'Copying is blocked here. The spec is selected below; press Ctrl+C.'; }
 }
-async function downloadPng() {
-  const s = cur(); if (!s) return;
-  if (!canSave()) { await openHandoff(false); $('out-status').textContent = 'Downloads are blocked in this view. Drag the image below into your Claude chat, or right-click it and choose Copy image.'; return; }
-  try {
-    const url = URL.createObjectURL(await toBlob(exportCanvas(s))), link = el('a', { href: url, download: `${s.name.replace(/\.[a-z0-9]+$/i, '')}_redline_markup.png` });
-    document.body.append(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 4000);
-    showToast('Downloaded annotated PNG. Drag & drop it into the chat!');
-  } catch { showToast('This image cannot be exported. Save it to your computer and drop the file in instead.', true); }
+/* ---------- save to this computer: a real Save As dialog where the browser has one, otherwise a download ---------- */
+const SAVE_TYPES = { png: ['PNG image', 'image/png'], jpg: ['JPEG image', 'image/jpeg'], pdf: ['PDF document', 'application/pdf'] };
+let hostSave = null;   // file-save service of a hosting Claude page, when there is one
+const hostReady = window.claude && typeof window.claude.use === 'function' ? window.claude.use('downloads').then((d) => { hostSave = d; }).catch(() => {}) : Promise.resolve();
+async function pickTarget(filename, ext) {
+  if (typeof window.showSaveFilePicker !== 'function') return null;
+  try { return await window.showSaveFilePicker({ suggestedName: filename, types: [{ description: SAVE_TYPES[ext][0], accept: { [SAVE_TYPES[ext][1]]: ['.' + ext] } }] }); }
+  catch (e) { if (e && e.name === 'AbortError') throw e; return null; }   // AbortError = the person cancelled; anything else = not allowed here
 }
-function closeDialogs() { $('out-dlg').hidden = true; $('url-dlg').hidden = true; }
+async function writeOut(handle, blob, filename) {
+  if (handle) { const w = await handle.createWritable(); await w.write(blob); await w.close(); return `Saved ${handle.name}.`; }
+  await hostReady;
+  if (hostSave) { await hostSave.save({ filename, data: blob }); return `Saved ${filename}.`; }
+  const url = URL.createObjectURL(blob), link = el('a', { href: url, download: filename });
+  document.body.append(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 15000);
+  return canSave() ? `Saved ${filename} to your downloads folder.` : `Saving ${filename}. If no file appears, this view blocks downloads: use Send to Claude, then Copy Image.`;
+}
+const saveError = (e) => e && (e.name === 'AbortError' || e.code === 'declined') ? 'Save cancelled. Nothing was written.'
+  : e && e.code === 'rate_limited' ? 'A save is already waiting for your answer. Finish that one, then try again.'
+  : 'The file could not be saved. If the image came from another website, save it to your computer and drop the file in instead.';
+/* Minimal PDF writer: one page per image, each page a JPEG of the marked-up image at the source's page size. */
+async function buildPdf(list, onPage) {
+  const enc = new TextEncoder(), parts = [], offsets = []; let pos = 0;
+  const put = (x) => { const b = typeof x === 'string' ? enc.encode(x) : x; parts.push(b); pos += b.length; };
+  const obj = (n, body) => { offsets[n] = pos; put(`${n} 0 obj\n`); body(); put('\nendobj\n'); };
+  const f = (v) => v.toFixed(2);
+  put('%PDF-1.4\n%\u00e2\u00e3\u00cf\u00d3\n');
+  obj(1, () => put('<< /Type /Catalog /Pages 2 0 R >>'));
+  obj(2, () => put(`<< /Type /Pages /Kids [${list.map((_, i) => `${3 + i * 3} 0 R`).join(' ')}] /Count ${list.length} >>`));
+  for (let i = 0; i < list.length; i++) {
+    if (onPage) onPage(i + 1);
+    const s = list[i], c = exportCanvas(s), jpg = new Uint8Array(await (await toBlob(c, 'image/jpeg', .92)).arrayBuffer());
+    let W = s.pt ? s.pt.w : s.w * .75, H = s.pt ? s.pt.h : s.h * .75; const k = Math.min(1, 14400 / Math.max(W, H)); W *= k; H *= k;
+    const p = 3 + i * 3, content = `q ${f(W)} 0 0 ${f(H)} 0 0 cm /Im0 Do Q`;
+    obj(p, () => put(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${f(W)} ${f(H)}] /Resources << /XObject << /Im0 ${p + 2} 0 R >> >> /Contents ${p + 1} 0 R >>`));
+    obj(p + 1, () => put(`<< /Length ${content.length} >>\nstream\n${content}\nendstream`));
+    obj(p + 2, () => { put(`<< /Type /XObject /Subtype /Image /Width ${c.width} /Height ${c.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpg.length} >>\nstream\n`); put(jpg); put('\nendstream'); });
+  }
+  const total = 3 + list.length * 3, xref = pos;
+  put(`xref\n0 ${total}\n0000000000 65535 f \n`);
+  for (let n = 1; n < total; n++) put(`${String(offsets[n]).padStart(10, '0')} 00000 n \n`);
+  put(`trailer\n<< /Size ${total} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`);
+  return new Blob(parts, { type: 'application/pdf' });
+}
+function openSave() {
+  const s = cur(); if (!s) return;
+  $('save-name').value = `${stemOf(s.name).replace(/-page-\d+$/, images.length > 1 ? '$&' : '')}_redline_markup`;
+  $('save-pdf-row').hidden = images.length < 2; if (images.length < 2 && $('save-pdf').checked) $('save-pdf1').checked = true;
+  $('save-pdf-label').textContent = `PDF document, all ${images.length} images with one per page`;
+  $('save-status').className = 'note'; $('save-status').textContent = 'Your marks are drawn into the saved file. The original file is not changed.';
+  $('btn-save-go').disabled = false; $('save-dlg').hidden = false; setTimeout(() => $('save-name').select(), 0);
+}
+async function doSave(e) {
+  e.preventDefault(); const s = cur(); if (!s) return;
+  const choice = document.querySelector('input[name="save-format"]:checked').value, ext = choice === 'pdf1' ? 'pdf' : choice, status = $('save-status');
+  const pages = choice === 'pdf' ? images : [s];
+  const base = ($('save-name').value.trim() || 'redline_markup').replace(/[\\/:*?"<>|]+/g, '_').replace(/\.(png|jpe?g|pdf)$/i, ''), filename = `${base}.${ext}`;
+  $('btn-save-go').disabled = true; status.className = 'note';
+  try {
+    const handle = await pickTarget(filename, ext);   // ask where to save first, while the click still counts
+    status.textContent = 'Saving…';
+    const blob = ext === 'pdf' ? await buildPdf(pages, (n) => { status.textContent = `Building the PDF, page ${n} of ${pages.length}…`; })
+      : await toBlob(exportCanvas(s), SAVE_TYPES[ext][1], .92);
+    const msg = await writeOut(handle, blob, filename);
+    closeDialogs(); showToast(msg);
+  } catch (err) { status.className = 'note bad'; status.textContent = saveError(err); }
+  $('btn-save-go').disabled = false;
+}
+function closeDialogs() { for (const v of document.querySelectorAll('.veil')) v.hidden = true; if (pagesDone) pagesDone(null); }
 for (const v of document.querySelectorAll('.veil')) v.addEventListener('click', (e) => { if (e.target === v || e.target.closest('[data-close]')) closeDialogs(); });
 
 /* ---------- bridge: only active when this page is served by the Redline_markup_studio local helper ---------- */
@@ -837,7 +1030,8 @@ $('toggle-numbers').addEventListener('change', (e) => { showNumbers = e.target.c
 $('btn-zoom-in').addEventListener('click', () => zoomAt(1.25, wrapper.clientWidth / 2, wrapper.clientHeight / 2));
 $('btn-zoom-out').addEventListener('click', () => zoomAt(.8, wrapper.clientWidth / 2, wrapper.clientHeight / 2));
 $('btn-fit').addEventListener('click', () => { const s = cur(); if (s) { s.view.fit = true; renderCanvas(); } });
-$('btn-export-png').addEventListener('click', downloadPng);
+$('btn-save').addEventListener('click', openSave);
+$('save-form').addEventListener('submit', doSave);
 $('btn-copy-spec').addEventListener('click', () => copySpec(false));
 $('btn-copy-spec-2').addEventListener('click', () => copySpec(true));
 $('btn-send').addEventListener('click', () => openHandoff(true));

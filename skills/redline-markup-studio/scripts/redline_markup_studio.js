@@ -5,7 +5,7 @@
  * Serves the studio page on 127.0.0.1, lets Claude queue images into it, and saves what the
  * user sends back (marked-up PNG, original image, coordinate spec) inside the project folder.
  *
- *   open    [--project DIR] [--image PATH_OR_URL]... [--no-browser] [--port N]
+ *   open    [--project DIR] [--image PATH_OR_URL]... [--no-browser] [--port N]   (--image also takes a PDF)
  *   wait    [--project DIR] [--timeout SECONDS]     block until the user presses "Send to Claude"
  *   latest  [--project DIR]                         print the newest markup again
  *   status  [--project DIR]
@@ -27,8 +27,11 @@ const DEFAULT_PORT = 4747;
 const MAX_IMAGE = 60 * 1024 * 1024;
 const MAX_BODY = 400 * 1024 * 1024;
 const IDLE_EXIT_MS = 12 * 60 * 60 * 1000;
-const MIME = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp',
-  '.bmp': 'image/bmp', '.svg': 'image/svg+xml', '.avif': 'image/avif' };
+const MIME = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.jfif': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp',
+  '.bmp': 'image/bmp', '.svg': 'image/svg+xml', '.avif': 'image/avif', '.ico': 'image/x-icon', '.tif': 'image/tiff', '.tiff': 'image/tiff',
+  '.heic': 'image/heic', '.heif': 'image/heif', '.pdf': 'application/pdf' };
+const VENDOR_DIR = path.join(__dirname, '..', 'assets', 'vendor');
+const VENDOR = new Set(['pdf.min.js', 'pdf.worker.min.js', 'UTIF.js', 'pako_inflate.min.js']);
 const EXT = Object.fromEntries(Object.entries(MIME).map(([e, m]) => [m, e]).reverse());
 
 /* ---------- small helpers ---------- */
@@ -70,8 +73,8 @@ async function fetchImage(url) {
     const buf = Buffer.from(await r.arrayBuffer());
     if (buf.length > MAX_IMAGE) throw new Error('image is larger than 60 MB');
     const ext = path.extname(new URL(url).pathname).toLowerCase();
-    const mime = type.startsWith('image/') ? type : MIME[ext];
-    if (!mime) throw new Error('that address did not return an image');
+    const mime = type.startsWith('image/') || type === 'application/pdf' ? type : MIME[ext];
+    if (!mime) throw new Error('that address did not return an image or PDF');
     let name = decodeURIComponent(path.basename(new URL(url).pathname)) || 'web-image';
     if (!path.extname(name)) name += EXT[mime] || '.png';
     return { buf, mime, name: safeName(name) };
@@ -79,10 +82,10 @@ async function fetchImage(url) {
 }
 function readLocalImage(file) {
   const abs = path.resolve(file), ext = path.extname(abs).toLowerCase();
-  if (!MIME[ext]) throw new Error(`${path.basename(abs)} is not a supported image (png, jpg, gif, webp, bmp, svg, avif)`);
+  if (!MIME[ext]) throw new Error(`${path.basename(abs)} is not a supported file (png, jpg, gif, webp, bmp, svg, avif, ico, tif, heic, pdf)`);
   const st = fs.statSync(abs);
   if (!st.isFile()) throw new Error(`${abs} is not a file`);
-  if (st.size > MAX_IMAGE) throw new Error('image is larger than 60 MB');
+  if (st.size > MAX_IMAGE) throw new Error('file is larger than 60 MB');
   return { buf: fs.readFileSync(abs), mime: MIME[ext], name: safeName(path.basename(abs)) };
 }
 
@@ -140,6 +143,11 @@ function serve(opts) {
         const html = fs.readFileSync(STUDIO_HTML);
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Content-Length': html.length, 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' });
         return res.end(html);
+      }
+      if (req.method === 'GET' && route.startsWith('/vendor/') && VENDOR.has(route.slice(8))) {   // decoders for PDF and TIFF files
+        const js = fs.readFileSync(path.join(VENDOR_DIR, route.slice(8)));
+        res.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8', 'Content-Length': js.length, 'Cache-Control': 'max-age=3600' });
+        return res.end(js);
       }
       if (!route.startsWith('/api/')) return json(res, 404, { error: 'not found' });
       if (req.headers['x-redline-token'] !== token) return json(res, 401, { error: 'missing or wrong token' });

@@ -5,7 +5,7 @@ description: Open Redline_markup_studio so the user can drop in an image, draw r
 
 # Redline_markup_studio
 
-A drawing board for telling you exactly what to change. The user drops in an image (a file from their computer, an image from a web page, or one you produced in this conversation), draws on it with Freehand, Line, Arrow, Circle, Box, Red X (Remove) and Text Label tools, optionally types a note against each mark, and hands back two things:
+A drawing board for telling you exactly what to change. The user drops in an image or a PDF (a file from their computer, an image from a web page, or one you produced in this conversation), draws on it with Freehand, Line, Arrow, Circle, Box, Red X (Remove) and Text Label tools, optionally types a note against each mark, and hands back two things:
 
 - a **marked-up PNG**, with every mark carrying a numbered badge
 - a **redline spec**: one numbered line per mark with exact pixel coordinates, plus any written instructions
@@ -14,7 +14,8 @@ Use it whenever pointing at a picture would be clearer than describing it: "move
 
 Files in this skill folder (the folder holding this SKILL.md; in Claude Code it is `${CLAUDE_SKILL_DIR}`):
 
-- `assets/Redline_markup_studio.html` - the whole studio in one self-contained page. It loads nothing from the internet.
+- `assets/Redline_markup_studio.html` - the whole studio in one self-contained page. It opens PNG, JPG, GIF, WebP, BMP, SVG, AVIF, ICO, TIFF, HEIC and PDF; each PDF page becomes its own image.
+- `assets/vendor/` - decoders for PDF and TIFF files, used when the page is served by the helper or opened from this folder. A lone copy of the page fetches them from a public CDN instead; the user's file is never uploaded either way.
 - `scripts/redline_markup_studio.js` - local helper for Claude Code (Node 18+, no dependencies).
 - `scripts/embed_images.py` - builds a copy of the studio with images already loaded (Python 3, standard library only).
 
@@ -24,7 +25,7 @@ Pick the mode that matches where you are running.
 
 You have a shell on the same machine as the user's browser.
 
-1. Start the studio for the current project and queue any images you already have as files or web addresses (repeat `--image` as needed; leave it out and the user adds their own):
+1. Start the studio for the current project and queue any images or PDFs you already have as files or web addresses (repeat `--image` as needed; leave it out and the user adds their own):
 
    ```bash
    node "${CLAUDE_SKILL_DIR}/scripts/redline_markup_studio.js" open --image path/or/url
@@ -57,11 +58,13 @@ This covers claude.ai, the Claude desktop and mobile chat apps, and Claude Code 
    node scripts/redline_markup_studio.js bundle --out Redline_markup_studio.html --image picture.png
    ```
 
-2. Tell the user how to hand the result back: draw the changes, press **Send to Claude**, then put both things in the chat: the marked-up image (Copy Image, drag it, or Download PNG and attach it) and the redline spec (Copy Redline Spec, then paste).
+2. Tell the user how to hand the result back: draw the changes, press **Send to Claude**, then put both things in the chat: the marked-up image (Copy Image, drag it, or Save PNG and attach it) and the redline spec (Copy Redline Spec, then paste).
 
 3. When they reply with the image and the spec, follow "Reading a markup".
 
 If the user would rather keep the studio around, tell them the same HTML file opens on its own in any browser by double-clicking it.
+
+In either mode the user can keep a copy for themselves with **Save Marked-Up File** (PNG, JPG or PDF). That is separate from sending it to you: a saved file reaches you only if they attach it.
 
 ## Reading a markup
 

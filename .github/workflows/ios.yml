@@ -15,7 +15,7 @@ permissions:
 
 concurrency:
   group: ios-build
-  cancel-in-progress: true
+  cancel-in-progress: false   # let a running build finish; the next one waits its turn
 
 env:
   BUNDLE_ID: com.hverdu86.redlinemarkupstudio
@@ -64,6 +64,7 @@ jobs:
             || { grep -nE "error:|BUILD FAILED" build-sim.log | head -60; tail -30 build-sim.log; exit 1; }
 
       - name: Run the app in iPhone and iPad simulators
+        timeout-minutes: 20
         run: |
           APP="ios/build-sim/Build/Products/Debug-iphonesimulator/Redline_markup_studio.app"
           pick() {

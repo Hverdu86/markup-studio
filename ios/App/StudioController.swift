@@ -210,6 +210,8 @@ final class StudioController: NSObject, ObservableObject {
         try? await Task.sleep(nanoseconds: 2_500_000_000)
         note("1 app hooks", await run("return [!!window.REDLINE_MARKUP_STUDIO_NATIVE, typeof window.REDLINE_MARKUP_STUDIO_ADD, !document.getElementById('btn-paste').hidden].join(',')", timeout: 20))
         note("2 sample loaded", await run(images, timeout: 20))
+        let tool = "return document.querySelector('.tool-btn.active').dataset.tool"
+        note("2b tool at launch", await run(tool, timeout: 20))
         for (key, ext, mime) in [("3 open PDF", "pdf", "application/pdf"), ("4 open TIFF", "tif", "image/tiff")] {
             guard let url = Bundle.main.url(forResource: "selftest", withExtension: ext), let data = try? Data(contentsOf: url) else {
                 note(key, "missing test file"); continue
@@ -217,6 +219,11 @@ final class StudioController: NSObject, ObservableObject {
             note(key, await run("return String(await window.REDLINE_MARKUP_STUDIO_ADD(dataUrl, name)) + ' | ' + document.getElementById('status-toast').textContent",
                                 ["dataUrl": dataURL(data, mime), "name": "selftest.\(ext)"], timeout: 60))
         }
+        _ = await run("document.querySelector('[data-tool=arrow]').click()", timeout: 20)   // pick a drawing tool, then load a file
+        if let url = Bundle.main.url(forResource: "selftest", withExtension: "tif"), let data = try? Data(contentsOf: url) {
+            _ = await run("return await window.REDLINE_MARKUP_STUDIO_ADD(dataUrl, name)", ["dataUrl": dataURL(data, "image/tiff"), "name": "second.tif"], timeout: 60)
+        }
+        note("4b tool after loading a file", await run(tool, timeout: 20))
         note("5 images", await run(images, timeout: 20))
         note("5b image painted", await run("""
             const c = document.getElementById('paint-canvas');

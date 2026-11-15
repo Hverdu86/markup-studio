@@ -99,9 +99,11 @@ jobs:
               if not ok(str(r.get(key, ""))): bad.append(f"{key}: {r.get(key)!r}")
           need("1 app hooks", lambda v: v == "true,function,true")
           need("2 sample loaded", lambda v: "sample-image.png" in v)
+          need("2b tool at launch", lambda v: v == "pan")
+          need("4b tool after loading a file", lambda v: v == "pan")
           need("3 open PDF", lambda v: v.startswith("true"))
           need("4 open TIFF", lambda v: v.startswith("true"))
-          need("5 images", lambda v: "selftest.png (300x200)" in v and "selftest" in v.split(";")[0])
+          need("5 images", lambda v: "second.png (300x200)" in v and "selftest" in v.split(";")[0])
           need("5b image painted", lambda v: v.startswith("painted"))
           def centred(v):   # the box is drawn around the middle of the 300x200 test image
               n = [int(x) for x in re.findall(r"\((\d+),(\d+)\) to \((\d+),(\d+)\)", v)[0]] if "[BOX" in v and " to (" in v else None

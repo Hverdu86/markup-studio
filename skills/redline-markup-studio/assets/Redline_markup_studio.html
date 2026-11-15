@@ -316,6 +316,8 @@ let selectedId = null, showNumbers = true, spaceDown = false, nextId = 1, bridge
 /* Present only inside the Redline_markup_studio iPhone/iPad app: saving, sharing, clipboard and web fetches go through iOS. */
 const native = window.REDLINE_MARKUP_STUDIO_NATIVE || null;
 const dataUrlToBlob = async (u) => (await fetch(u)).blob();
+const safeStart = () => { if (native) setTool('pan', false); };   // a fresh image opens with Pan on, so a stray touch cannot mark it
+const panNote = () => native ? ' Pan is on: choose a tool to start marking.' : '';
 
 const cur = () => images[current] || null;
 const selected = () => { const s = cur(); return s && s.actions.find(a => a.id === selectedId) || null; };
@@ -528,8 +530,8 @@ async function addRaster(blob, name, opts = {}) {
   if (!opts.sample) images = images.filter(s => !s.sample);
   const s = { id: nextId++, name: name || `image-${images.length + 1}.png`, img, blob, w: img.naturalWidth || 800, h: img.naturalHeight || 500, pt: opts.pt || null,
     actions: opts.actions || [], undo: [], redo: [], view: { z: 1, ox: 0, oy: 0, fit: true }, sample: !!opts.sample };
-  images.push(s); current = images.length - 1; selectedId = null; refresh();
-  if (!opts.sample && !opts.quiet) showToast(`Loaded ${s.name} (${s.w}x${s.h})`);
+  images.push(s); current = images.length - 1; selectedId = null; safeStart(); refresh();
+  if (!opts.sample && !opts.quiet) showToast(`Loaded ${s.name} (${s.w}x${s.h}).${panNote()}`);
   return s;
 }
 async function addBlob(blob, name, opts = {}) {
@@ -572,7 +574,7 @@ async function addPdf(blob, name) {
     last = await addRaster(await toBlob(c), `${stemOf(name)}${doc.numPages > 1 ? `-page-${n}` : ''}.png`, { quiet: true, pt: { w: base.width, h: base.height } }) || last;
   }
   if (last && pages.length > 1) { current = images.length - pages.length; refresh(); }
-  if (last) showToast(`Loaded ${name}: ${pages.length} page${pages.length === 1 ? '' : 's'}${pages.length > 1 ? '. Switch pages with the Image menu.' : '.'}`);
+  if (last) showToast(`Loaded ${name}: ${pages.length} page${pages.length === 1 ? '' : 's'}${pages.length > 1 ? '. Switch pages with the Image menu.' : '.'}${panNote()}`);
   return last;
 }
 async function addTiff(blob, name) {
@@ -735,7 +737,7 @@ const shape = (tool, x1, y1, x2, y2) => ({ id: nextId++, tool, color: currentCol
 const touches = new Map(); let pinch = null;   // two fingers on the image zoom, pan and turn it instead of drawing
 const pinchState = () => { const [a, b] = [...touches.values()]; return { d: Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)), x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, ang: Math.atan2(b.y - a.y, b.x - a.x) }; };
 const TWIST_START = .12;   // about 7 degrees: below this a pinch only zooms, so zooming does not turn the image by accident
-const LEVEL_SNAP = .035;   // 2 degrees: this close to level or square, it clicks exactly level so upright can be found again
+const LEVEL_SNAP = .0873;   // 5 degrees: this close to level or square, it clicks exactly level so upright is easy to find again
 function endPinch(s) {   // fingers lifted: the image stays at the angle it was left at
   const v = s.view, p = pinch; pinch = null;
   let rot = rotOf(s); rot -= Math.round(rot / (2 * Math.PI)) * 2 * Math.PI;
@@ -1107,16 +1109,18 @@ async function addSample() {
     { id: id(), tool: 'text', color: '#b91c1c', width: 3, x1: 392, y1: 120, text: 'Move here', note: '' },
   ];
   await addBlob(await toBlob(c), 'sample-image.png', { sample: true, actions });
-  showToast('Ready. A sample image is loaded; add your own to replace it.');
+  showToast(`Ready. A sample image is loaded; add your own to replace it.${panNote()}`);
 }
 
 /* ---------- wiring ---------- */
-document.querySelectorAll('.tool-btn').forEach((btn) => btn.addEventListener('click', () => {
+function setTool(id, announce) {
+  const btn = document.querySelector(`.tool-btn[data-tool="${id}"]`); if (!btn) return;
   document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active')); btn.classList.add('active');
-  currentTool = btn.getAttribute('data-tool'); canvas.style.cursor = cursorFor(currentTool);
+  currentTool = id; canvas.style.cursor = cursorFor(currentTool);
   if (currentTool !== 'select') { selectedId = null; markSel(); renderCanvas(); }
-  showToast(`Active tool: ${btn.textContent.trim()}`);
-}));
+  if (announce) showToast(`Active tool: ${btn.textContent.trim()}`);
+}
+document.querySelectorAll('.tool-btn').forEach((btn) => btn.addEventListener('click', () => setTool(btn.getAttribute('data-tool'), true)));
 function setColor(c) {
   currentColor = c; $('custom-color').value = c;
   document.querySelectorAll('.color-swatch').forEach(s => s.classList.toggle('on', s.getAttribute('data-color') === c));

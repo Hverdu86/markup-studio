@@ -179,9 +179,13 @@ final class StudioController: NSObject, ObservableObject {
     }
 
     /// Runs JavaScript in the page and waits for its result.
-    private func run(_ body: String, _ arguments: [String: Any] = [:]) async -> Any? {
-        await withCheckedContinuation { (continuation: CheckedContinuation<Any?, Never>) in
-            webView.callAsyncJavaScript(body, arguments: arguments, in: nil, in: .page) { result in
+    private func run(_ body: String, _ arguments: [String: Any] = [:], timeout seconds: Int = 0) async -> Any? {
+        // with a timeout, a step that never finishes reports "TIMEOUT" instead of stalling everything after it
+        let script = seconds > 0
+            ? "return await Promise.race([(async () => { \(body)\n })(), new Promise(done => setTimeout(() => done('TIMEOUT'), \(seconds * 1000)))])"
+            : body
+        return await withCheckedContinuation { (continuation: CheckedContinuation<Any?, Never>) in
+            webView.callAsyncJavaScript(script, arguments: arguments, in: nil, in: .page) { result in
                 switch result {
                 case .success(let value): continuation.resume(returning: value)
                 case .failure(let error): continuation.resume(returning: "JS error: \(error.localizedDescription)")
@@ -194,38 +198,44 @@ final class StudioController: NSObject, ObservableObject {
 
     private func runSelfTest() async {
         var report: [String: Any] = [:]
-        try? await Task.sleep(nanoseconds: 2_500_000_000)
-        report["1 app hooks"] = await run("return [!!window.REDLINE_MARKUP_STUDIO_NATIVE, typeof window.REDLINE_MARKUP_STUDIO_ADD, !document.getElementById('btn-paste').hidden].join(',')")
-        report["2 sample loaded"] = await run("return [...document.querySelectorAll('#image-select option')].map(o => o.textContent).join(' ; ')")
-        for (key, name, ext, mime) in [("3 open PDF", "selftest", "pdf", "application/pdf"), ("4 open TIFF", "selftest", "tif", "image/tiff")] {
-            guard let url = Bundle.main.url(forResource: name, withExtension: ext), let data = try? Data(contentsOf: url) else {
-                report[key] = "missing test file"; continue
+        func note(_ key: String, _ value: Any?) {   // write the report after every step, so a stall still leaves evidence
+            report[key] = value ?? "nil"
+            let safe = report.mapValues { (item: Any) -> Any in JSONSerialization.isValidJSONObject([item]) ? item : String(describing: item) }
+            if let folder = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first,
+               let json = try? JSONSerialization.data(withJSONObject: safe, options: [.prettyPrinted, .sortedKeys]) {
+                try? json.write(to: folder.appendingPathComponent("selftest.json"))
             }
-            report[key] = await run("return String(await window.REDLINE_MARKUP_STUDIO_ADD(dataUrl, name)) + ' | ' + document.getElementById('status-toast').textContent",
-                                    ["dataUrl": dataURL(data, mime), "name": "\(name).\(ext)"])
         }
-        report["5 images"] = await run("return [...document.querySelectorAll('#image-select option')].map(o => o.textContent).join(' ; ')")
-        report["6 draw a box"] = await run("""
+        let images = "return [...document.querySelectorAll('#image-select option')].map(o => o.textContent).join(' ; ')"
+        try? await Task.sleep(nanoseconds: 2_500_000_000)
+        note("1 app hooks", await run("return [!!window.REDLINE_MARKUP_STUDIO_NATIVE, typeof window.REDLINE_MARKUP_STUDIO_ADD, !document.getElementById('btn-paste').hidden].join(',')", timeout: 20))
+        note("2 sample loaded", await run(images, timeout: 20))
+        for (key, ext, mime) in [("3 open PDF", "pdf", "application/pdf"), ("4 open TIFF", "tif", "image/tiff")] {
+            guard let url = Bundle.main.url(forResource: "selftest", withExtension: ext), let data = try? Data(contentsOf: url) else {
+                note(key, "missing test file"); continue
+            }
+            note(key, await run("return String(await window.REDLINE_MARKUP_STUDIO_ADD(dataUrl, name)) + ' | ' + document.getElementById('status-toast').textContent",
+                                ["dataUrl": dataURL(data, mime), "name": "selftest.\(ext)"], timeout: 60))
+        }
+        note("5 images", await run(images, timeout: 20))
+        note("6 draw a box", await run("""
             const c = document.getElementById('paint-canvas'), r = c.getBoundingClientRect();
             const ev = (t, x, y) => c.dispatchEvent(new PointerEvent(t, { clientX: r.left + x, clientY: r.top + y, button: 0, pointerId: 1, pointerType: 'mouse', bubbles: true }));
             document.querySelector('[data-tool="rect"]').click();
             ev('pointerdown', r.width / 2 - 30, r.height / 2 - 20); ev('pointermove', r.width / 2 + 30, r.height / 2 + 20); ev('pointerup', r.width / 2 + 30, r.height / 2 + 20);
             await new Promise(done => setTimeout(done, 300));
             return document.getElementById('action-count').textContent + ' | ' + ([...document.querySelectorAll('#redline-log .ln')].pop() || {}).textContent;
-            """)
+            """, timeout: 20))
         for (key, radio) in [("7 save PNG", "save-png"), ("8 save PDF, all pages", "save-pdf")] {
-            report[key] = await run("""
+            note(key, await run("""
                 document.getElementById('btn-save').click(); document.getElementById(radio).checked = true;
                 document.getElementById('save-form').requestSubmit();
                 for (let i = 0; i < 150; i++) { await new Promise(done => setTimeout(done, 200)); if (document.getElementById('save-dlg').hidden) break; }
                 return document.getElementById('save-dlg').hidden ? document.getElementById('status-toast').textContent : 'STUCK: ' + document.getElementById('save-status').textContent;
-                """, ["radio": radio])
+                """, ["radio": radio], timeout: 45))
         }
-        report["9 files the app received"] = selfTestSaved
-        if let folder = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first,
-           let json = try? JSONSerialization.data(withJSONObject: report.mapValues { (value: Any) -> Any in JSONSerialization.isValidJSONObject([value]) ? value : String(describing: value) }, options: [.prettyPrinted, .sortedKeys]) {
-            try? json.write(to: folder.appendingPathComponent("selftest.json"))
-        }
+        note("9 files the app received", selfTestSaved)
+        note("done", true)
     }
 
     // MARK: Scripts added to the page

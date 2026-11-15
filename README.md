@@ -39,6 +39,24 @@ Then just ask, for example "open the redline studio on docs/diagram.png", or run
 
 Skills are added per account; on Team and Enterprise plans an owner can provision the skill for everyone.
 
+## Install on iPhone and iPad
+
+Download the app: [Redline_markup_studio.ipa](https://github.com/Hverdu86/markup-studio/releases/download/ios-latest/Redline_markup_studio.ipa)
+
+It is an unsigned build for sideloading and needs iOS or iPadOS 16 or newer.
+
+1. Open [Sideloadly](https://sideloadly.io) on your computer and connect the iPhone or iPad.
+2. Drag `Redline_markup_studio.ipa` into Sideloadly, enter your Apple ID and press Start.
+3. On the device, trust the developer profile under Settings > General > VPN & Device Management.
+
+In the app:
+
+- **Add Image/PDF** opens the photo library, the camera or Files. **Paste** adds whatever image or PDF you last copied. Files and other apps can also send a picture or PDF to it with "Open in".
+- Draw with a finger or Apple Pencil. Two fingers pinch to zoom and pan.
+- **Save Marked-Up File** and **Send to Claude** open the share sheet, so the result can go to Files, Photos, AirDrop or straight into the Claude app. Sending also copies the redline spec, ready to paste into the same chat.
+
+The app's source is in [`ios/`](ios). Every change to it is built on a Mac by [`.github/workflows/ios.yml`](.github/workflows/ios.yml), run in iPhone and iPad simulators, and published to the link above.
+
 ## Use it with no install
 
 Open [`skills/redline-markup-studio/assets/Redline_markup_studio.html`](skills/redline-markup-studio/assets/Redline_markup_studio.html) in a browser. Mark up an image or PDF, then attach the saved file and paste the copied spec into any Claude conversation.
@@ -82,6 +100,7 @@ Keep everything else exactly as it is.
 skills/redline-markup-studio/     the skill: SKILL.md, the studio page, the helper scripts,
                                   and assets/vendor/ (bundled PDF and TIFF decoders with their licences)
 dist/redline-markup-studio.zip    the same skill packaged for claude.ai
+ios/                              the iPhone and iPad app (Swift, generated with XcodeGen)
 ```
 
 Rebuild the zip after changing the skill:

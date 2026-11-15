@@ -219,7 +219,7 @@ textarea { width: 100%; background: var(--s950); border: 1px solid var(--s800); 
       <div class="dropveil" id="dropveil" hidden>Drop to add this image</div>
     </div>
     <div class="foot">
-      <span>Tip: Drag to draw lines, arrows, circles, or Red X's. Shift + drag pans, Ctrl + click selects a mark, Backspace or Del removes it. Scroll or pinch to zoom; on a touch screen, twist two fingers to rotate the image.</span>
+      <span>Tip: Drag to draw lines, arrows, circles, or Red X's. Shift + drag pans, Ctrl + click selects a mark, Backspace or Del removes it. Scroll or pinch to zoom; on a touch screen, twist two fingers to turn the image to any angle.</span>
       <span id="status-toast" role="status">Ready.</span>
     </div>
   </div>
@@ -399,20 +399,35 @@ function drawAction(c, act, s) {
   }
   c.restore();
 }
+/* Rotation. Each image has an angle (s.rot, radians, clockwise) that changes how it is shown and saved, never its pixels.
+   A mark remembers the angle the image had when it was drawn (a.rot) and keeps its coordinates in that upright frame,
+   so it is drawn level with the screen and afterwards stays stuck to the image like ink on paper. */
+const rotPt = (x, y, r) => r ? [x * Math.cos(r) - y * Math.sin(r), x * Math.sin(r) + y * Math.cos(r)] : [x, y];
+const rotOf = (o) => o.rot || 0;
+function outBox(s) {   // size of the image as now turned, and the shift that puts its top-left corner at (0,0)
+  const r = rotOf(s); if (!r) return { w: s.w, h: s.h, tx: 0, ty: 0 };
+  const pts = [[0, 0], [s.w, 0], [0, s.h], [s.w, s.h]].map(([x, y]) => rotPt(x, y, r)), xs = pts.map(q => q[0]), ys = pts.map(q => q[1]);
+  return { w: Math.round(Math.max(...xs) - Math.min(...xs)), h: Math.round(Math.max(...ys) - Math.min(...ys)), tx: -Math.min(...xs), ty: -Math.min(...ys) };
+}
+/* A mark's own coordinates -> pixels of the image as it is now shown, saved and sent. */
+function outPt(a, s, x, y) { const o = outBox(s), [ex, ey] = rotPt(x, y, rotOf(s) - rotOf(a)); return [Math.round(ex + o.tx), Math.round(ey + o.ty)]; }
+const degrees = (r) => { let d = Math.round(r * 180 / Math.PI) % 360; if (d > 180) d -= 360; if (d <= -180) d += 360; return d; };
+const tiltOf = (a, s) => degrees(rotOf(s) - rotOf(a));
 function drawBadge(c, a, s, n) {
-  const r = badgeR(s), [x, y] = anchor(a, s);
-  c.save();
+  const r = badgeR(s), [ax, ay] = anchor(a, s), [bx, by] = rotPt(ax, ay, -rotOf(a)), x = 0, y = 0;
+  c.save(); c.translate(bx, by); c.rotate(-rotOf(s));   // numbers stay upright however the image is turned
   c.beginPath(); c.arc(x, y, r, 0, Math.PI * 2); c.fillStyle = a.color; c.fill();
   c.lineWidth = 1.5 * scaleOf(s); c.strokeStyle = inkOn(a.color); c.stroke();
   c.fillStyle = inkOn(a.color); c.font = `700 ${r * (n > 99 ? .8 : n > 9 ? 1.02 : 1.25)}px ui-monospace, Menlo, Consolas, monospace`;
   c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(String(n), x, y + r * .07);
   c.restore();
 }
-function paintImage(c, s, preview) {
+function paintImage(c, s, preview, clean) {
   c.fillStyle = '#ffffff'; c.fillRect(0, 0, s.w, s.h);
   c.drawImage(s.img, 0, 0, s.w, s.h);
+  if (clean) return;
   const all = preview ? [...s.actions, preview] : s.actions;
-  all.forEach(a => drawAction(c, a, s));
+  all.forEach(a => { c.save(); c.rotate(-rotOf(a)); drawAction(c, a, s); c.restore(); });
   if (showNumbers) all.forEach((a, i) => drawBadge(c, a, s, i + 1));
 }
 
@@ -426,19 +441,20 @@ function renderNow(preview) {
   if (!s) { $('zoom-val').textContent = ''; return; }
   if (s.view.fit) fitView(s);
   const v = s.view;
-  ctx.save(); ctx.translate(v.ox, v.oy); if (v.rot) ctx.rotate(v.rot); ctx.scale(v.z, v.z);
+  ctx.save(); ctx.translate(v.ox, v.oy); ctx.rotate(rotOf(s)); ctx.scale(v.z, v.z);
   ctx.shadowColor = 'rgba(15,23,42,.35)'; ctx.shadowBlur = 24 / v.z; ctx.shadowOffsetY = 8 / v.z; ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, s.w, s.h);
   ctx.shadowColor = 'transparent'; ctx.imageSmoothingQuality = 'high';
   ctx.beginPath(); ctx.rect(0, 0, s.w, s.h); ctx.clip();
   paintImage(ctx, s, preview);
   ctx.restore();
   const a = selected();
-  if (a && !v.rot) {
+  if (a) {
     const b = bbox(a, s), pad = 5;
-    ctx.save(); ctx.setLineDash([5, 4]); ctx.lineWidth = 1.25; ctx.strokeStyle = '#2563eb';
-    ctx.strokeRect(b.x * v.z + v.ox - pad, b.y * v.z + v.oy - pad, b.w * v.z + 2 * pad, b.h * v.z + 2 * pad);
+    ctx.save(); ctx.translate(v.ox, v.oy); ctx.rotate(rotOf(s) - rotOf(a));   // the outline follows the mark's own tilt
+    ctx.setLineDash([5, 4]); ctx.lineWidth = 1.25; ctx.strokeStyle = '#2563eb';
+    ctx.strokeRect(b.x * v.z - pad, b.y * v.z - pad, b.w * v.z + 2 * pad, b.h * v.z + 2 * pad);
     ctx.setLineDash([]); ctx.fillStyle = '#fff';
-    for (const h of handles(a)) { ctx.beginPath(); ctx.rect(h.x * v.z + v.ox - 4.5, h.y * v.z + v.oy - 4.5, 9, 9); ctx.fill(); ctx.stroke(); }
+    for (const h of handles(a)) { ctx.beginPath(); ctx.rect(h.x * v.z - 4.5, h.y * v.z - 4.5, 9, 9); ctx.fill(); ctx.stroke(); }
     ctx.restore();
   }
   $('zoom-val').textContent = Math.round(v.z * 100) + '%';
@@ -449,9 +465,9 @@ function handles(a) {
   return [];
 }
 function fitView(s) {
-  const W = wrapper.clientWidth, H = wrapper.clientHeight, m = 20;
-  const z = Math.max(.02, Math.min((W - 2 * m) / s.w, (H - 2 * m) / s.h, 4));
-  s.view.z = z; s.view.ox = (W - s.w * z) / 2; s.view.oy = (H - s.h * z) / 2;
+  const W = wrapper.clientWidth, H = wrapper.clientHeight, m = 20, o = outBox(s);   // fits the image at whatever angle it is turned to
+  const z = Math.max(.02, Math.min((W - 2 * m) / o.w, (H - 2 * m) / o.h, 4));
+  s.view.z = z; s.view.ox = (W - o.w * z) / 2 + o.tx * z; s.view.oy = (H - o.h * z) / 2 + o.ty * z;
 }
 function zoomAt(f, cx, cy) {
   const s = cur(); if (!s) return; const v = s.view; if (v.fit) fitView(s);
@@ -628,24 +644,27 @@ async function addUrl(url) {
 }
 
 /* ---------- log + spec ---------- */
-function logLine(a) {
-  const c = a.color;
-  if (a.tool === 'pen') { const f = a.points[0], l = a.points[a.points.length - 1]; return `[FREEHAND ${c}] from (${f.x},${f.y}) to (${l.x},${l.y})`; }
-  if (a.tool === 'line') return `[LINE ${c}] (${a.x1},${a.y1}) -> (${a.x2},${a.y2})`;
-  if (a.tool === 'arrow') return `[ARROW ${c}] tail (${a.x1},${a.y1}) -> tip (${a.x2},${a.y2})`;
-  if (a.tool === 'circle') return `[CIRCLE ${c}] center (${Math.round((a.x1 + a.x2) / 2)},${Math.round((a.y1 + a.y2) / 2)}), bbox (${a.x1},${a.y1})-(${a.x2},${a.y2})`;
-  if (a.tool === 'rect') return `[BOX ${c}] (${a.x1},${a.y1}) to (${a.x2},${a.y2})`;
-  if (a.tool === 'cross') return `[REMOVE X ${c}] region (${a.x1},${a.y1}) to (${a.x2},${a.y2})`;
-  return `[TEXT "${a.text}" ${c}] at (${a.x1},${a.y1})`;
+function logLine(a, s) {
+  const c = a.color, P = (x, y) => `(${outPt(a, s, x, y).join(',')})`, t = tiltOf(a, s);
+  const tilt = t && (BOX.has(a.tool) || a.tool === 'text') ? `, tilted ${t}°` : '';
+  if (a.tool === 'pen') { const f = a.points[0], l = a.points[a.points.length - 1]; return `[FREEHAND ${c}] from ${P(f.x, f.y)} to ${P(l.x, l.y)}`; }
+  if (a.tool === 'line') return `[LINE ${c}] ${P(a.x1, a.y1)} -> ${P(a.x2, a.y2)}`;
+  if (a.tool === 'arrow') return `[ARROW ${c}] tail ${P(a.x1, a.y1)} -> tip ${P(a.x2, a.y2)}`;
+  if (a.tool === 'circle') return `[CIRCLE ${c}] center ${P((a.x1 + a.x2) / 2, (a.y1 + a.y2) / 2)}, bbox ${P(a.x1, a.y1)}-${P(a.x2, a.y2)}${tilt}`;
+  if (a.tool === 'rect') return `[BOX ${c}] ${P(a.x1, a.y1)} to ${P(a.x2, a.y2)}${tilt}`;
+  if (a.tool === 'cross') return `[REMOVE X ${c}] region ${P(a.x1, a.y1)} to ${P(a.x2, a.y2)}${tilt}`;
+  return `[TEXT "${a.text}" ${c}] at ${P(a.x1, a.y1)}${tilt}`;
 }
 const fileStem = (i) => `image-${i + 1}`;
 function specText() {
   const lines = [`${APP_NAME} redline spec`, 'Coordinates are image pixels (X right, Y down) from the top-left corner.' + (showNumbers ? ' Each number matches the numbered badge drawn on the marked-up image.' : ''), ''];
   images.forEach((s, i) => {
-    lines.push(`Image${images.length > 1 ? ` ${i + 1} of ${images.length}` : ''}: ${s.name} (${s.w}x${s.h}) - marked-up file: ${fileStem(i)}-annotated.png`);
+    const o = outBox(s), deg = degrees(rotOf(s));
+    lines.push(`Image${images.length > 1 ? ` ${i + 1} of ${images.length}` : ''}: ${s.name} (${o.w}x${o.h}) - marked-up file: ${fileStem(i)}-annotated.png`);
+    if (deg) lines.push(`This image is turned ${Math.abs(deg)}° ${deg > 0 ? 'clockwise' : 'counter-clockwise'} from the original file. Coordinates refer to the turned image, exactly as in the marked-up file.`);
     lines.push('--- Redline Marks ---');
     if (!s.actions.length) lines.push('(no marks)');
-    s.actions.forEach((a, n) => lines.push(`${n + 1}. ${logLine(a)}${a.note && a.note.trim() ? ` - ${a.note.trim()}` : ''}`));
+    s.actions.forEach((a, n) => lines.push(`${n + 1}. ${logLine(a, s)}${a.note && a.note.trim() ? ` - ${a.note.trim()}` : ''}`));
     lines.push('');
   });
   const notes = $('extra-notes').value.trim();
@@ -663,7 +682,7 @@ function updateLog() {
     ta.addEventListener('focus', () => { dirty = false; if (selectedId !== a.id) { selectedId = a.id; markSel(); renderCanvas(); } });
     ta.addEventListener('input', () => { if (!dirty) { pushUndo(); dirty = true; syncButtons(); } a.note = ta.value; grow(ta); });
     const num = el('span', { class: 'num', text: String(i + 1) }); num.style.background = a.color; num.style.color = inkOn(a.color);
-    const row = el('li', { class: 'row', 'data-id': a.id }, [num, el('span', { class: 'ln', text: logLine(a) }),
+    const row = el('li', { class: 'row', 'data-id': a.id }, [num, el('span', { class: 'ln', text: logLine(a, s) }),
       el('button', { class: 'del', type: 'button', text: '✕', title: 'Delete this mark', 'aria-label': `Delete mark ${i + 1}`,
         onclick: (e) => { e.stopPropagation(); pushUndo(); s.actions.splice(s.actions.indexOf(a), 1); if (selectedId === a.id) selectedId = null; refresh(); } }),
       ta]);
@@ -705,41 +724,29 @@ function refresh() {
 /* ---------- pointer interaction ---------- */
 let drag = null;
 function getCanvasCoords(e) {
-  const r = canvas.getBoundingClientRect(), s = cur(), v = s.view, sx = e.clientX - r.left, sy = e.clientY - r.top;
+  const r = canvas.getBoundingClientRect(), s = cur(), v = s.view, sx = e.clientX - r.left, sy = e.clientY - r.top, rot = rotOf(s);
   if (v.fit) fitView(s);   // a tap can arrive before the first paint of a new image has placed it
-  return { x: Math.round(Math.max(0, Math.min(s.w, (sx - v.ox) / v.z))), y: Math.round(Math.max(0, Math.min(s.h, (sy - v.oy) / v.z))), rx: (sx - v.ox) / v.z, ry: (sy - v.oy) / v.z, sx, sy };
+  const [ix, iy] = rotPt((sx - v.ox) / v.z, (sy - v.oy) / v.z, -rot);   // pixel of the original image under the pointer
+  const [ux, uy] = rotPt(Math.max(0, Math.min(s.w, ix)), Math.max(0, Math.min(s.h, iy)), rot);   // the same point, kept on the image, in the upright frame new marks are drawn in
+  return { x: Math.round(ux), y: Math.round(uy), rx: ix, ry: iy, sx, sy };
 }
-const shape = (tool, x1, y1, x2, y2) => ({ id: nextId++, tool, color: currentColor, width: currentWidth, x1, y1, x2, y2, note: '' });
+const inMark = (a, pos) => rotPt(pos.rx, pos.ry, rotOf(a)).map(Math.round);   // the pointer in an existing mark's own frame
+const shape = (tool, x1, y1, x2, y2) => ({ id: nextId++, tool, color: currentColor, width: currentWidth, x1, y1, x2, y2, rot: rotOf(cur()), note: '' });
 const touches = new Map(); let pinch = null;   // two fingers on the image zoom, pan and turn it instead of drawing
 const pinchState = () => { const [a, b] = [...touches.values()]; return { d: Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)), x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, ang: Math.atan2(b.y - a.y, b.x - a.x) }; };
-const TWIST_START = .26;   // about 15 degrees: below this a pinch only zooms, so zooming never turns the image by accident
-const turned = (x, y, r) => [x * Math.cos(r) - y * Math.sin(r), x * Math.sin(r) + y * Math.cos(r)];
-/* Turn the image itself by quarter turns (q = 1, 2, 3 clockwise). Marks, undo history and page size turn with it,
-   so the coordinates, the saved file and what Claude receives all match what is on screen. */
-function rotateImage(s, q) {
-  const W = s.w, H = s.h, c = document.createElement('canvas'), odd = q % 2 === 1;
-  c.width = odd ? H : W; c.height = odd ? W : H;
-  const x = c.getContext('2d');
-  x.translate(q === 1 ? H : q === 2 ? W : 0, q === 2 ? H : q === 3 ? W : 0); x.rotate(q * Math.PI / 2); x.drawImage(s.img, 0, 0, W, H);
-  const map = (px, py) => q === 1 ? [H - py, px] : q === 2 ? [W - px, H - py] : [py, W - px];
-  const turn = (a) => {
-    if (a.points) a.points = a.points.map(p => { const [nx, ny] = map(p.x, p.y); return { x: nx, y: ny }; });
-    else { [a.x1, a.y1] = map(a.x1, a.y1); if ('x2' in a) [a.x2, a.y2] = map(a.x2, a.y2); }
-    if (BOX.has(a.tool)) { const x1 = Math.min(a.x1, a.x2), y1 = Math.min(a.y1, a.y2), x2 = Math.max(a.x1, a.x2), y2 = Math.max(a.y1, a.y2); Object.assign(a, { x1, y1, x2, y2 }); }   // keep corners top-left to bottom-right
-    return a;
-  };
-  s.actions.forEach(turn);
-  for (const k of ['undo', 'redo']) s[k] = s[k].map(j => JSON.stringify(JSON.parse(j).map(turn)));
-  s.img = c; s.w = c.width; s.h = c.height; if (s.pt && odd) s.pt = { w: s.pt.h, h: s.pt.w };
-  toBlob(c).then(b => { s.blob = b; }).catch(() => {});
-}
-function endPinch(s) {   // fingers lifted: settle on the nearest quarter turn
+const TWIST_START = .12;   // about 7 degrees: below this a pinch only zooms, so zooming does not turn the image by accident
+const LEVEL_SNAP = .035;   // 2 degrees: this close to level or square, it clicks exactly level so upright can be found again
+function endPinch(s) {   // fingers lifted: the image stays at the angle it was left at
   const v = s.view, p = pinch; pinch = null;
-  const q = ((p.twisting ? Math.round(p.twist / (Math.PI / 2)) : 0) % 4 + 4) % 4, z = v.z;
-  const [rx, ry] = turned(p.px * z, p.py * z, q * Math.PI / 2);
-  const shift = q === 1 ? [s.h, 0] : q === 2 ? [s.w, s.h] : q === 3 ? [0, s.w] : [0, 0];
-  v.rot = 0; v.ox = p.mx - rx - z * shift[0]; v.oy = p.my - ry - z * shift[1];
-  if (q) { rotateImage(s, q); v.fit = true; selectedId = null; showToast(`Rotated the image ${q === 2 ? 'upside down' : q === 1 ? 'a quarter turn clockwise' : 'a quarter turn counter-clockwise'}. Marks and coordinates turned with it.`); }
+  let rot = rotOf(s); rot -= Math.round(rot / (2 * Math.PI)) * 2 * Math.PI;
+  const square = Math.round(rot / (Math.PI / 2)) * (Math.PI / 2);
+  if (Math.abs(rot - square) < LEVEL_SNAP) rot = square;
+  const [rx, ry] = rotPt(p.P[0] * v.z, p.P[1] * v.z, rot); v.ox = p.mx - rx; v.oy = p.my - ry;   // keep the same spot under the fingers
+  s.rot = rot;
+  if (Math.abs(rot - p.rot) > 1e-6) {
+    const deg = degrees(rot);
+    showToast(deg ? `Image turned to ${Math.abs(deg)}° ${deg > 0 ? 'clockwise' : 'counter-clockwise'}. It stays at this angle; marks stay attached to it.` : 'Image is upright again.');
+  }
   refresh();
 }
 canvas.addEventListener('pointerdown', (e) => {
@@ -752,7 +759,7 @@ canvas.addEventListener('pointerdown', (e) => {
       if (drag && (drag.kind === 'move' || drag.kind === 'resize') && !drag.moved) s.undo.pop();
       drag = null;   // the first finger's half-drawn mark is dropped
       const g = pinchState();   // remember which point of the image sits between the fingers
-      pinch = { d: g.d, z: v.z, px: (g.x - v.ox) / v.z, py: (g.y - v.oy) / v.z, mx: g.x, my: g.y, ang: g.ang, twist: 0, twisting: false };
+      pinch = { d: g.d, z: v.z, rot: rotOf(s), P: rotPt((g.x - v.ox) / v.z, (g.y - v.oy) / v.z, -rotOf(s)), mx: g.x, my: g.y, ang: g.ang, twist: 0, twisting: false };
       refresh(); e.preventDefault(); return;
     }
     if (touches.size > 2) return;
@@ -761,24 +768,24 @@ canvas.addEventListener('pointerdown', (e) => {
   if (currentTool === 'pan' || spaceDown || e.button === 1 || (left && e.shiftKey)) { drag = { kind: 'pan', sx: pos.sx, sy: pos.sy, ox: v.ox, oy: v.oy }; canvas.style.cursor = 'grabbing'; }
   else if (!left) return;
   else if (currentTool === 'select' || e.ctrlKey || e.metaKey) {
-    const tol = 7 / v.z, a0 = selected(), h = a0 && handles(a0).find(h => Math.hypot(h.x - pos.rx, h.y - pos.ry) <= 9 / v.z);
+    const tol = 7 / v.z, a0 = selected(), m0 = a0 && inMark(a0, pos), h = a0 && handles(a0).find(h => Math.hypot(h.x - m0[0], h.y - m0[1]) <= 9 / v.z);
     if (h) { pushUndo(); drag = { kind: 'resize', a: a0, k: h.k, moved: false }; }
     else {
-      const a = [...s.actions].reverse().find(a => hit(a, s, pos.rx, pos.ry, tol));
+      const a = [...s.actions].reverse().find(a => hit(a, s, ...rotPt(pos.rx, pos.ry, rotOf(a)), tol));
       selectedId = a ? a.id : null; markSel(true);
-      if (a) { pushUndo(); drag = { kind: 'move', a, x: pos.x, y: pos.y, moved: false }; showToast(`Selected mark ${s.actions.indexOf(a) + 1}. Click Delete Selected (or press Delete) to remove it, or drag to move it.`); }
+      if (a) { const m = inMark(a, pos); pushUndo(); drag = { kind: 'move', a, x: m[0], y: m[1], moved: false }; showToast(`Selected mark ${s.actions.indexOf(a) + 1}. Click Delete Selected (or press Delete) to remove it, or drag to move it.`); }
       else showToast('Nothing selected. Click directly on a mark or its number.');
     }
   } else if (currentTool === 'text') {
     const txt = textStampInput.value.trim() || 'Note';
-    pushUndo(); s.actions.push({ id: nextId++, tool: 'text', color: currentColor, width: currentWidth, x1: pos.x, y1: pos.y, text: txt, note: '' });
-    refresh(); showToast(`Stamped text "${txt}" at (${pos.x}, ${pos.y})`); e.preventDefault(); return;
+    selectedId = null;   // stamped when the pointer lifts, so a second finger can still turn this into a pinch or twist
+    drag = { kind: 'stamp', a: { id: nextId++, tool: 'text', color: currentColor, width: currentWidth, x1: pos.x, y1: pos.y, text: txt, rot: rotOf(s), note: '' } };
   } else {
     selectedId = null;
-    drag = { kind: 'draw', a: currentTool === 'pen' ? { id: nextId++, tool: 'pen', color: currentColor, width: currentWidth, points: [{ x: pos.x, y: pos.y }], note: '' } : shape(currentTool, pos.x, pos.y, pos.x, pos.y) };
+    drag = { kind: 'draw', a: currentTool === 'pen' ? { id: nextId++, tool: 'pen', color: currentColor, width: currentWidth, points: [{ x: pos.x, y: pos.y }], rot: rotOf(s), note: '' } : shape(currentTool, pos.x, pos.y, pos.x, pos.y) };
   }
   if (drag) { try { canvas.setPointerCapture(e.pointerId); } catch { /* synthetic pointer */ } }
-  renderCanvas(drag && drag.kind === 'draw' ? drag.a : null); e.preventDefault();
+  renderCanvas(drag && (drag.kind === 'draw' || drag.kind === 'stamp') ? drag.a : null); e.preventDefault();
 });
 canvas.addEventListener('pointermove', (e) => {
   const s = cur(); if (!s) return; const pos = getCanvasCoords(e);
@@ -788,25 +795,27 @@ canvas.addEventListener('pointermove', (e) => {
       const g = pinchState(), v = s.view, z = Math.max(.03, Math.min(16, pinch.z * g.d / pinch.d));
       let d = g.ang - pinch.ang; d -= Math.round(d / (2 * Math.PI)) * 2 * Math.PI; pinch.twist += d; pinch.ang = g.ang;
       if (Math.abs(pinch.twist) > TWIST_START) pinch.twisting = true;
-      const rot = pinch.twisting ? pinch.twist - Math.sign(pinch.twist) * TWIST_START : 0, [rx, ry] = turned(pinch.px * z, pinch.py * z, rot);
+      const rot = pinch.rot + (pinch.twisting ? pinch.twist - Math.sign(pinch.twist) * TWIST_START : 0), [rx, ry] = rotPt(pinch.P[0] * z, pinch.P[1] * z, rot);
       pinch.mx = g.x; pinch.my = g.y;
-      v.rot = rot; v.ox = g.x - rx; v.oy = g.y - ry; v.z = z; v.fit = false; renderCanvas();
+      s.rot = rot; v.ox = g.x - rx; v.oy = g.y - ry; v.z = z; v.fit = false; renderCanvas();
     }
     return;
   }
-  $('cursor-coords').textContent = `X: ${pos.x}, Y: ${pos.y}`;
+  const shown = outBox(s); $('cursor-coords').textContent = `X: ${Math.round(pos.x + shown.tx)}, Y: ${Math.round(pos.y + shown.ty)}`;
   if (!drag) return; const a = drag.a;
   if (drag.kind === 'pan') { s.view.ox = drag.ox + pos.sx - drag.sx; s.view.oy = drag.oy + pos.sy - drag.sy; s.view.fit = false; renderCanvas(); return; }
+  if (drag.kind === 'stamp') { a.x1 = pos.x; a.y1 = pos.y; renderCanvas(a); return; }   // slide to place the label before lifting
   if (drag.kind === 'draw') {
     if (a.tool === 'pen') { const l = a.points[a.points.length - 1]; if (l.x !== pos.x || l.y !== pos.y) a.points.push({ x: pos.x, y: pos.y }); }
     else { a.x2 = pos.x; a.y2 = pos.y; }
     renderCanvas(a); return;
   }
   drag.moved = true;
-  if (drag.kind === 'move') { const dx = pos.x - drag.x, dy = pos.y - drag.y; drag.x = pos.x; drag.y = pos.y; shift(a, dx, dy); }
+  const m = inMark(a, pos);
+  if (drag.kind === 'move') { const dx = m[0] - drag.x, dy = m[1] - drag.y; drag.x = m[0]; drag.y = m[1]; shift(a, dx, dy); }
   else {
-    if (drag.k === 'p1' || drag.k[0] === '1') a.x1 = pos.x; if (drag.k === 'p2' || drag.k[0] === '2') a.x2 = pos.x;
-    if (drag.k === 'p1' || drag.k[1] === '1') a.y1 = pos.y; if (drag.k === 'p2' || drag.k[1] === '2') a.y2 = pos.y;
+    if (drag.k === 'p1' || drag.k[0] === '1') a.x1 = m[0]; if (drag.k === 'p2' || drag.k[0] === '2') a.x2 = m[0];
+    if (drag.k === 'p1' || drag.k[1] === '1') a.y1 = m[1]; if (drag.k === 'p2' || drag.k[1] === '2') a.y2 = m[1];
   }
   renderCanvas();
 });
@@ -818,6 +827,7 @@ function endDrag() {
   const s = cur(), d = drag; drag = null; if (!s || !d) return;
   canvas.style.cursor = cursorFor(currentTool);
   if (d.kind === 'pan') showToast('Panned. Press Fit to see the whole image again.');
+  if (d.kind === 'stamp') { pushUndo(); s.actions.push(d.a); refresh(); showToast(`Stamped text "${d.a.text}" at (${outPt(d.a, s, d.a.x1, d.a.y1).join(', ')})`); return; }
   if (d.kind === 'draw') {
     if (d.a.tool !== 'pen' && d.a.x1 === d.a.x2 && d.a.y1 === d.a.y2) { renderCanvas(); return; }   // a stray click, not a mark
     pushUndo(); s.actions.push(d.a); refresh(); markSel(true);
@@ -847,7 +857,7 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') { selectedId = null; drag = null; refresh(); return; }
   if (e.key.startsWith('Arrow') && a) {
     const d = e.shiftKey ? 10 : 1; pushUndo();
-    shift(a, e.key === 'ArrowLeft' ? -d : e.key === 'ArrowRight' ? d : 0, e.key === 'ArrowUp' ? -d : e.key === 'ArrowDown' ? d : 0); refresh(); e.preventDefault();
+    shift(a, ...rotPt(e.key === 'ArrowLeft' ? -d : e.key === 'ArrowRight' ? d : 0, e.key === 'ArrowUp' ? -d : e.key === 'ArrowDown' ? d : 0, rotOf(a) - rotOf(s)).map(Math.round)); refresh(); e.preventDefault();
   }
 });
 document.addEventListener('keyup', (e) => { if (e.key === ' ') { spaceDown = false; canvas.style.cursor = cursorFor(currentTool); } });
@@ -882,10 +892,12 @@ document.addEventListener('paste', async (e) => {
 });
 
 /* ---------- export + hand-off ---------- */
-function exportCanvas(s) {
-  const k = Math.min(1, 6000 / Math.max(s.w, s.h)), c = document.createElement('canvas');
-  c.width = Math.round(s.w * k); c.height = Math.round(s.h * k);
-  const x = c.getContext('2d'); x.scale(k, k); x.imageSmoothingQuality = 'high'; paintImage(x, s, null);
+function exportCanvas(s, clean) {   // the image at the angle it is turned to, with the marks unless clean
+  const o = outBox(s), k = Math.min(1, 6000 / Math.max(o.w, o.h)), c = document.createElement('canvas');
+  c.width = Math.round(o.w * k); c.height = Math.round(o.h * k);
+  const x = c.getContext('2d'); x.scale(k, k); x.imageSmoothingQuality = 'high';
+  x.fillStyle = '#ffffff'; x.fillRect(0, 0, o.w, o.h);
+  x.translate(o.tx, o.ty); x.rotate(rotOf(s)); paintImage(x, s, null, clean);
   return c;
 }
 const toBlob = (c, type = 'image/png', q) => new Promise((res, rej) => { try { c.toBlob(b => b ? res(b) : rej(new Error('export')), type, q); } catch (e) { rej(e); } });
@@ -893,9 +905,12 @@ const toDataUrl = (b) => new Promise((res, rej) => { const r = new FileReader();
 const canSave = () => !!bridge || location.protocol === 'file:' || /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
 function markData(s) {
   return s.actions.map((a, n) => {
-    const b = bbox(a, s), o = { n: n + 1, tool: a.tool, kind: TAG[a.tool], color: a.color, size: a.width, log: logLine(a), note: (a.note || '').trim(),
-      bbox: { x: Math.round(b.x), y: Math.round(b.y), w: Math.round(b.w), h: Math.round(b.h) } };
-    if (a.points) o.points = a.points; else { o.x1 = a.x1; o.y1 = a.y1; if ('x2' in a) { o.x2 = a.x2; o.y2 = a.y2; } }
+    const b = bbox(a, s), P = (x, y) => outPt(a, s, x, y);
+    const corners = [P(b.x, b.y), P(b.x + b.w, b.y), P(b.x, b.y + b.h), P(b.x + b.w, b.y + b.h)], xs = corners.map(q => q[0]), ys = corners.map(q => q[1]);
+    const o = { n: n + 1, tool: a.tool, kind: TAG[a.tool], color: a.color, size: a.width, log: logLine(a, s), note: (a.note || '').trim(), tilt_deg: tiltOf(a, s),
+      bbox: { x: Math.min(...xs), y: Math.min(...ys), w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) } };
+    if (a.points) o.points = a.points.map(q => { const [x, y] = P(q.x, q.y); return { x, y }; });
+    else { [o.x1, o.y1] = P(a.x1, a.y1); if ('x2' in a) [o.x2, o.y2] = P(a.x2, a.y2); }
     if (a.tool === 'text') o.text = a.text;
     return o;
   });
@@ -927,7 +942,11 @@ async function openHandoff(send) {
     status.textContent = 'Sending to Claude…';
     try {
       const payload = { app: APP_NAME, spec: specText(), notes: $('extra-notes').value.trim(), numbered: showNumbers, images: [] };
-      for (const o of outs) payload.images.push({ name: o.s.name, width: o.s.w, height: o.s.h, annotated: await toDataUrl(o.blob), original: await toDataUrl(o.s.blob), marks: markData(o.s) });
+      for (const o of outs) {
+        const size = outBox(o.s), turned = rotOf(o.s);   // a turned image is sent turned, so the clean copy lines up with the marked-up one
+        payload.images.push({ name: o.s.name, width: size.w, height: size.h, rotation_deg: degrees(turned), annotated: await toDataUrl(o.blob),
+          original: await toDataUrl(turned ? await toBlob(exportCanvas(o.s, true)) : o.s.blob), marks: markData(o.s) });
+      }
       const r = await api('/api/submit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       const j = await r.json(); if (!r.ok) throw new Error(j.error || 'send failed');
       status.className = 'note ok'; status.textContent = `Sent. Go back to Claude: it now has ${outs.length} marked-up image${outs.length === 1 ? '' : 's'} and the redline spec. Saved in ${j.dir}`;
@@ -983,7 +1002,8 @@ async function buildPdf(list, onPage) {
   for (let i = 0; i < list.length; i++) {
     if (onPage) onPage(i + 1);
     const s = list[i], c = exportCanvas(s), jpg = new Uint8Array(await (await toBlob(c, 'image/jpeg', .92)).arrayBuffer());
-    let W = s.pt ? s.pt.w : s.w * .75, H = s.pt ? s.pt.h : s.h * .75; const k = Math.min(1, 14400 / Math.max(W, H)); W *= k; H *= k;
+    const size = outBox(s), perPx = s.pt ? s.pt.w / s.w : .75;
+    let W = size.w * perPx, H = size.h * perPx; const k = Math.min(1, 14400 / Math.max(W, H)); W *= k; H *= k;
     const p = 3 + i * 3, content = `q ${f(W)} 0 0 ${f(H)} 0 0 cm /Im0 Do Q`;
     obj(p, () => put(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${f(W)} ${f(H)}] /Resources << /XObject << /Im0 ${p + 2} 0 R >> >> /Contents ${p + 1} 0 R >>`));
     obj(p + 1, () => put(`<< /Length ${content.length} >>\nstream\n${content}\nendstream`));

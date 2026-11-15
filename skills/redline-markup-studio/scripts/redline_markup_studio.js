@@ -123,7 +123,7 @@ function serve(opts) {
       const annFile = `image-${i + 1}-annotated.png`, orgFile = `image-${i + 1}-original${EXT[org.mime] || '.png'}`;
       fs.writeFileSync(path.join(dir, annFile), ann.buf); fs.writeFileSync(path.join(dir, orgFile), org.buf);
       files.push(annFile, orgFile);
-      meta.images.push({ name: String(im.name || ''), width: im.width, height: im.height, annotated: annFile, original: orgFile, marks: im.marks || [] });
+      meta.images.push({ name: String(im.name || ''), width: im.width, height: im.height, rotation_deg: Number(im.rotation_deg) || 0, annotated: annFile, original: orgFile, marks: im.marks || [] });
     });
     fs.writeFileSync(path.join(dir, 'markup.json'), JSON.stringify(meta, null, 2));
     const fileNotes = meta.images.map((im, i) => `- Image ${i + 1} "${im.name}": marked-up = ${im.annotated}, clean original = ${im.original}`).join('\n');

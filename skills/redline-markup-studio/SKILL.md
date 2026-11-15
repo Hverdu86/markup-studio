@@ -68,7 +68,8 @@ In either mode the user can keep a copy for themselves with **Save Marked-Up Fil
 
 ## Reading a markup
 
-- Each numbered line in the spec matches the badge with the same number on the marked-up image. Coordinates are pixels of the original image, X to the right and Y down from the top-left corner.
+- Each numbered line in the spec matches the badge with the same number on the marked-up image. Coordinates are pixels of the marked-up image, X to the right and Y down from the top-left corner.
+- On a touch screen the user can turn the image to any angle. The spec then says how far it is turned, the marked-up image and the clean copy are both saved turned, and the coordinates refer to that turned image. A mark listed as "tilted N°" was drawn at a different angle; its two points are opposite corners of a box rotated by that amount.
 - What the marks mean:
   - `REMOVE X` - delete or remove whatever sits under the X.
   - `ARROW` - the tail is the thing or place it starts from, the tip is where it should go or what it points at.

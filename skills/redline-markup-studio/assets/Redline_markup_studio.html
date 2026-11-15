@@ -219,7 +219,7 @@ textarea { width: 100%; background: var(--s950); border: 1px solid var(--s800); 
       <div class="dropveil" id="dropveil" hidden>Drop to add this image</div>
     </div>
     <div class="foot">
-      <span>Tip: Drag to draw lines, arrows, circles, or Red X's. Shift + drag pans, Ctrl + click selects a mark, Backspace or Del removes it. Scroll or pinch to zoom.</span>
+      <span>Tip: Drag to draw lines, arrows, circles, or Red X's. Shift + drag pans, Ctrl + click selects a mark, Backspace or Del removes it. Scroll or pinch to zoom; on a touch screen, twist two fingers to rotate the image.</span>
       <span id="status-toast" role="status">Ready.</span>
     </div>
   </div>
@@ -426,14 +426,14 @@ function renderNow(preview) {
   if (!s) { $('zoom-val').textContent = ''; return; }
   if (s.view.fit) fitView(s);
   const v = s.view;
-  ctx.save(); ctx.translate(v.ox, v.oy); ctx.scale(v.z, v.z);
+  ctx.save(); ctx.translate(v.ox, v.oy); if (v.rot) ctx.rotate(v.rot); ctx.scale(v.z, v.z);
   ctx.shadowColor = 'rgba(15,23,42,.35)'; ctx.shadowBlur = 24 / v.z; ctx.shadowOffsetY = 8 / v.z; ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, s.w, s.h);
   ctx.shadowColor = 'transparent'; ctx.imageSmoothingQuality = 'high';
   ctx.beginPath(); ctx.rect(0, 0, s.w, s.h); ctx.clip();
   paintImage(ctx, s, preview);
   ctx.restore();
   const a = selected();
-  if (a) {
+  if (a && !v.rot) {
     const b = bbox(a, s), pad = 5;
     ctx.save(); ctx.setLineDash([5, 4]); ctx.lineWidth = 1.25; ctx.strokeStyle = '#2563eb';
     ctx.strokeRect(b.x * v.z + v.ox - pad, b.y * v.z + v.oy - pad, b.w * v.z + 2 * pad, b.h * v.z + 2 * pad);
@@ -708,8 +708,38 @@ function getCanvasCoords(e) {
   return { x: Math.round(Math.max(0, Math.min(s.w, (sx - v.ox) / v.z))), y: Math.round(Math.max(0, Math.min(s.h, (sy - v.oy) / v.z))), rx: (sx - v.ox) / v.z, ry: (sy - v.oy) / v.z, sx, sy };
 }
 const shape = (tool, x1, y1, x2, y2) => ({ id: nextId++, tool, color: currentColor, width: currentWidth, x1, y1, x2, y2, note: '' });
-const touches = new Map(); let pinch = null;   // two fingers on the image zoom and pan it instead of drawing
-const pinchState = () => { const [a, b] = [...touches.values()]; return { d: Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)), x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }; };
+const touches = new Map(); let pinch = null;   // two fingers on the image zoom, pan and turn it instead of drawing
+const pinchState = () => { const [a, b] = [...touches.values()]; return { d: Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)), x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, ang: Math.atan2(b.y - a.y, b.x - a.x) }; };
+const TWIST_START = .26;   // about 15 degrees: below this a pinch only zooms, so zooming never turns the image by accident
+const turned = (x, y, r) => [x * Math.cos(r) - y * Math.sin(r), x * Math.sin(r) + y * Math.cos(r)];
+/* Turn the image itself by quarter turns (q = 1, 2, 3 clockwise). Marks, undo history and page size turn with it,
+   so the coordinates, the saved file and what Claude receives all match what is on screen. */
+function rotateImage(s, q) {
+  const W = s.w, H = s.h, c = document.createElement('canvas'), odd = q % 2 === 1;
+  c.width = odd ? H : W; c.height = odd ? W : H;
+  const x = c.getContext('2d');
+  x.translate(q === 1 ? H : q === 2 ? W : 0, q === 2 ? H : q === 3 ? W : 0); x.rotate(q * Math.PI / 2); x.drawImage(s.img, 0, 0, W, H);
+  const map = (px, py) => q === 1 ? [H - py, px] : q === 2 ? [W - px, H - py] : [py, W - px];
+  const turn = (a) => {
+    if (a.points) a.points = a.points.map(p => { const [nx, ny] = map(p.x, p.y); return { x: nx, y: ny }; });
+    else { [a.x1, a.y1] = map(a.x1, a.y1); if ('x2' in a) [a.x2, a.y2] = map(a.x2, a.y2); }
+    if (BOX.has(a.tool)) { const x1 = Math.min(a.x1, a.x2), y1 = Math.min(a.y1, a.y2), x2 = Math.max(a.x1, a.x2), y2 = Math.max(a.y1, a.y2); Object.assign(a, { x1, y1, x2, y2 }); }   // keep corners top-left to bottom-right
+    return a;
+  };
+  s.actions.forEach(turn);
+  for (const k of ['undo', 'redo']) s[k] = s[k].map(j => JSON.stringify(JSON.parse(j).map(turn)));
+  s.img = c; s.w = c.width; s.h = c.height; if (s.pt && odd) s.pt = { w: s.pt.h, h: s.pt.w };
+  toBlob(c).then(b => { s.blob = b; }).catch(() => {});
+}
+function endPinch(s) {   // fingers lifted: settle on the nearest quarter turn
+  const v = s.view, p = pinch; pinch = null;
+  const q = ((p.twisting ? Math.round(p.twist / (Math.PI / 2)) : 0) % 4 + 4) % 4, z = v.z;
+  const [rx, ry] = turned(p.px * z, p.py * z, q * Math.PI / 2);
+  const shift = q === 1 ? [s.h, 0] : q === 2 ? [s.w, s.h] : q === 3 ? [0, s.w] : [0, 0];
+  v.rot = 0; v.ox = p.mx - rx - z * shift[0]; v.oy = p.my - ry - z * shift[1];
+  if (q) { rotateImage(s, q); v.fit = true; selectedId = null; showToast(`Rotated the image ${q === 2 ? 'upside down' : q === 1 ? 'a quarter turn clockwise' : 'a quarter turn counter-clockwise'}. Marks and coordinates turned with it.`); }
+  refresh();
+}
 canvas.addEventListener('pointerdown', (e) => {
   const s = cur(); if (!s) return;
   canvas.focus({ preventScroll: true });
@@ -719,7 +749,8 @@ canvas.addEventListener('pointerdown', (e) => {
     if (touches.size === 2) {
       if (drag && (drag.kind === 'move' || drag.kind === 'resize') && !drag.moved) s.undo.pop();
       drag = null;   // the first finger's half-drawn mark is dropped
-      const g = pinchState(); pinch = { d: g.d, x: g.x, y: g.y, z: v.z, ox: v.ox, oy: v.oy };
+      const g = pinchState();   // remember which point of the image sits between the fingers
+      pinch = { d: g.d, z: v.z, px: (g.x - v.ox) / v.z, py: (g.y - v.oy) / v.z, mx: g.x, my: g.y, ang: g.ang, twist: 0, twisting: false };
       refresh(); e.preventDefault(); return;
     }
     if (touches.size > 2) return;
@@ -752,8 +783,12 @@ canvas.addEventListener('pointermove', (e) => {
   if (touches.has(e.pointerId)) touches.set(e.pointerId, { x: pos.sx, y: pos.sy });
   if (pinch) {
     if (touches.size >= 2) {
-      const g = pinchState(), v = s.view, z = Math.max(.03, Math.min(16, pinch.z * g.d / pinch.d)), k = z / pinch.z;
-      v.ox = g.x - (pinch.x - pinch.ox) * k; v.oy = g.y - (pinch.y - pinch.oy) * k; v.z = z; v.fit = false; renderCanvas();
+      const g = pinchState(), v = s.view, z = Math.max(.03, Math.min(16, pinch.z * g.d / pinch.d));
+      let d = g.ang - pinch.ang; d -= Math.round(d / (2 * Math.PI)) * 2 * Math.PI; pinch.twist += d; pinch.ang = g.ang;
+      if (Math.abs(pinch.twist) > TWIST_START) pinch.twisting = true;
+      const rot = pinch.twisting ? pinch.twist - Math.sign(pinch.twist) * TWIST_START : 0, [rx, ry] = turned(pinch.px * z, pinch.py * z, rot);
+      pinch.mx = g.x; pinch.my = g.y;
+      v.rot = rot; v.ox = g.x - rx; v.oy = g.y - ry; v.z = z; v.fit = false; renderCanvas();
     }
     return;
   }
@@ -788,7 +823,7 @@ function endDrag() {
   else if (d.kind === 'move' || d.kind === 'resize') { if (!d.moved) s.undo.pop(); refresh(); }
   else renderCanvas();
 }
-const liftPointer = (e) => { touches.delete(e.pointerId); if (pinch) { if (touches.size < 2) pinch = null; return; } endDrag(); };
+const liftPointer = (e) => { touches.delete(e.pointerId); if (pinch) { const s = cur(); if (touches.size < 2) { if (s) endPinch(s); else pinch = null; } return; } endDrag(); };
 canvas.addEventListener('pointerup', liftPointer); canvas.addEventListener('pointercancel', liftPointer);
 canvas.addEventListener('wheel', (e) => {
   if (!cur()) return; e.preventDefault(); const r = canvas.getBoundingClientRect();

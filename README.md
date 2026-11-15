@@ -52,7 +52,7 @@ It is an unsigned build for sideloading and needs iOS or iPadOS 16 or newer.
 In the app:
 
 - **Add Image/PDF** opens the photo library, the camera or Files. **Paste** adds whatever image or PDF you last copied. Files and other apps can also send a picture or PDF to it with "Open in".
-- Draw with a finger or Apple Pencil. Two fingers pinch to zoom and pan.
+- Draw with a finger or Apple Pencil. Two fingers pinch to zoom and pan; twist them to rotate the image a quarter turn at a time, and the marks and coordinates turn with it.
 - **Save Marked-Up File** and **Send to Claude** open the share sheet, so the result can go to Files, Photos, AirDrop or straight into the Claude app. Sending also copies the redline spec, ready to paste into the same chat.
 
 The app's source is in [`ios/`](ios). Every change to it is built on a Mac by [`.github/workflows/ios.yml`](.github/workflows/ios.yml), run in iPhone and iPad simulators, and published to the link above.

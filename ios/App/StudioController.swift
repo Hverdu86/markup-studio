@@ -218,6 +218,14 @@ final class StudioController: NSObject, ObservableObject {
                                 ["dataUrl": dataURL(data, mime), "name": "selftest.\(ext)"], timeout: 60))
         }
         note("5 images", await run(images, timeout: 20))
+        note("5b image painted", await run("""
+            const c = document.getElementById('paint-canvas');
+            for (let i = 0; i <= 80; i++) {
+              if (c.getContext('2d').getImageData(c.width >> 1, c.height >> 1, 1, 1).data[3] > 0) return 'painted after ' + i * 100 + ' ms';
+              await new Promise(done => setTimeout(done, 100));
+            }
+            return 'NOT PAINTED';
+            """, timeout: 20))
         note("6 draw a box", await run("""
             const c = document.getElementById('paint-canvas'), r = c.getBoundingClientRect();
             const ev = (t, x, y) => c.dispatchEvent(new PointerEvent(t, { clientX: r.left + x, clientY: r.top + y, button: 0, pointerId: 1, pointerType: 'mouse', bubbles: true }));

@@ -454,7 +454,8 @@ function fitView(s) {
   s.view.z = z; s.view.ox = (W - s.w * z) / 2; s.view.oy = (H - s.h * z) / 2;
 }
 function zoomAt(f, cx, cy) {
-  const s = cur(); if (!s) return; const v = s.view, z = Math.max(.03, Math.min(16, v.z * f)), k = z / v.z;
+  const s = cur(); if (!s) return; const v = s.view; if (v.fit) fitView(s);
+  const z = Math.max(.03, Math.min(16, v.z * f)), k = z / v.z;
   v.ox = cx - (cx - v.ox) * k; v.oy = cy - (cy - v.oy) * k; v.z = z; v.fit = false; renderCanvas();
 }
 
@@ -705,6 +706,7 @@ function refresh() {
 let drag = null;
 function getCanvasCoords(e) {
   const r = canvas.getBoundingClientRect(), s = cur(), v = s.view, sx = e.clientX - r.left, sy = e.clientY - r.top;
+  if (v.fit) fitView(s);   // a tap can arrive before the first paint of a new image has placed it
   return { x: Math.round(Math.max(0, Math.min(s.w, (sx - v.ox) / v.z))), y: Math.round(Math.max(0, Math.min(s.h, (sy - v.oy) / v.z))), rx: (sx - v.ox) / v.z, ry: (sy - v.oy) / v.z, sx, sy };
 }
 const shape = (tool, x1, y1, x2, y2) => ({ id: nextId++, tool, color: currentColor, width: currentWidth, x1, y1, x2, y2, note: '' });

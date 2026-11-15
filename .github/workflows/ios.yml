@@ -26,7 +26,7 @@ jobs:
     runs-on: macos-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Generate the Xcode project
         run: |
@@ -93,7 +93,7 @@ jobs:
             if [ -f "$data/Documents/selftest.json" ]; then
               cp "$data/Documents/selftest.json" "selftest-$kind.json"; echo "SELFTEST $kind"; cat "selftest-$kind.json"
               python3 - "selftest-$kind.json" <<'PY' || status=1
-          import json, sys
+          import json, re, sys
           r = json.load(open(sys.argv[1])); bad = []
           def need(key, ok):
               if not ok(str(r.get(key, ""))): bad.append(f"{key}: {r.get(key)!r}")
@@ -102,7 +102,11 @@ jobs:
           need("3 open PDF", lambda v: v.startswith("true"))
           need("4 open TIFF", lambda v: v.startswith("true"))
           need("5 images", lambda v: "selftest.png (300x200)" in v and "selftest" in v.split(";")[0])
-          need("6 draw a box", lambda v: v.startswith("1 mark") and "[BOX" in v)
+          need("5b image painted", lambda v: v.startswith("painted"))
+          def centred(v):   # the box is drawn around the middle of the 300x200 test image
+              n = [int(x) for x in re.findall(r"\((\d+),(\d+)\) to \((\d+),(\d+)\)", v)[0]] if "[BOX" in v and " to (" in v else None
+              return bool(n) and v.startswith("1 mark") and n[2] > n[0] and n[3] > n[1] and abs((n[0] + n[2]) / 2 - 150) <= 3 and abs((n[1] + n[3]) / 2 - 100) <= 3
+          need("6 draw a box", centred)
           need("7 save PNG", lambda v: v.startswith("Saved") and v.endswith(".png."))
           need("8 save PDF, all pages", lambda v: v.startswith("Saved") and v.endswith(".pdf."))
           saved = r.get("9 files the app received", {})

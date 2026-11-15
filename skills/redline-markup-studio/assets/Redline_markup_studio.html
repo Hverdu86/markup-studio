@@ -27,6 +27,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 button, select, label.btn { cursor: pointer; }
 :focus-visible { outline: 2px solid var(--blue-lo); outline-offset: 1px; }
 .mono { font-family: var(--mono); }
+.band, .btn, .tool-btn, .foot, #canvas-wrapper { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 
 .band { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px;
   padding: 8px var(--gr) 8px var(--gl); border-bottom: 1px solid var(--s800); min-width: 0; }
@@ -145,6 +146,7 @@ textarea { width: 100%; background: var(--s950); border: 1px solid var(--s800); 
     <select id="image-select" title="Switch between the images you have loaded"></select>
     <button id="btn-remove-image" type="button" class="btn" title="Remove the current image and its marks">Remove</button>
     <label class="btn" title="Pick files from this computer: PNG, JPG, GIF, WebP, BMP, SVG, AVIF, TIFF, HEIC photos, or a PDF"><span>Add Image/PDF</span><input id="file-upload" type="file" accept="image/*,.svg,.pdf,.tif,.tiff,.heic,.heif,application/pdf" multiple hidden></label>
+    <button id="btn-paste" type="button" class="btn" title="Add the image or PDF you last copied" hidden>Paste</button>
     <button id="btn-url" type="button" class="btn" title="Load an image from a web address">From URL</button>
     <button id="btn-save" type="button" class="btn go" title="Save the marked-up result to this computer as a PNG, JPG or PDF">Save Marked-Up File</button>
     <button id="btn-copy-spec" type="button" class="btn spec">Copy Redline Spec for Chat</button>
@@ -217,7 +219,7 @@ textarea { width: 100%; background: var(--s950); border: 1px solid var(--s800); 
       <div class="dropveil" id="dropveil" hidden>Drop to add this image</div>
     </div>
     <div class="foot">
-      <span>Tip: Drag to draw lines, arrows, circles, or Red X's. Shift + drag pans, Ctrl + click selects a mark, Backspace or Del removes it. Scroll to zoom.</span>
+      <span>Tip: Drag to draw lines, arrows, circles, or Red X's. Shift + drag pans, Ctrl + click selects a mark, Backspace or Del removes it. Scroll or pinch to zoom.</span>
       <span id="status-toast" role="status">Ready.</span>
     </div>
   </div>
@@ -279,7 +281,7 @@ textarea { width: 100%; background: var(--s950); border: 1px solid var(--s800); 
       <div style="display:grid;gap:8px"><span class="cap">Marked-up image</span><div class="shots" id="shots"></div></div>
       <div style="display:grid;gap:8px"><span class="cap">Redline spec</span>
         <textarea id="out-spec" readonly></textarea>
-        <div><button class="btn spec" id="btn-copy-spec-2" type="button">Copy Redline Spec for Chat</button></div>
+        <div class="grp"><button class="btn send" id="btn-share" type="button" hidden>Share to Claude</button><button class="btn spec" id="btn-copy-spec-2" type="button">Copy Redline Spec for Chat</button></div>
       </div>
     </div>
   </div>
@@ -310,6 +312,10 @@ let images = [];          // { id, name, img, blob, w, h, actions, undo, redo, v
 let current = -1;
 let currentTool = 'pen', currentColor = '#b91c1c', currentWidth = 3;
 let selectedId = null, showNumbers = true, spaceDown = false, nextId = 1, bridge = null, seenInbox = 0;
+
+/* Present only inside the Redline_markup_studio iPhone/iPad app: saving, sharing, clipboard and web fetches go through iOS. */
+const native = window.REDLINE_MARKUP_STUDIO_NATIVE || null;
+const dataUrlToBlob = async (u) => (await fetch(u)).blob();
 
 const cur = () => images[current] || null;
 const selected = () => { const s = cur(); return s && s.actions.find(a => a.id === selectedId) || null; };
@@ -516,6 +522,7 @@ async function addBlob(blob, name, opts = {}) {
     if (kind === 'pdf') return await addPdf(blob, name || 'document.pdf');
     if (kind === 'tiff') return await addTiff(blob, name || 'image.tif');
     if (kind === 'heic') {
+      const direct = await addRaster(blob, name, opts); if (direct) return direct;
       showToast(`Converting ${label}…`);
       const out = [].concat(await (await lib('heic'))({ blob, toType: 'image/png' }));
       let s = null; for (let i = 0; i < out.length; i++) s = await addRaster(out[i], `${stemOf(name)}${out.length > 1 ? `-${i + 1}` : ''}.png`) || s;
@@ -601,6 +608,8 @@ async function addUrl(url) {
     if (bridge) {
       const r = await api('/api/fetch?url=' + encodeURIComponent(url));
       if (!r.ok) throw new Error('fetch failed'); blob = await r.blob();
+    } else if (native) {
+      blob = await dataUrlToBlob((await native.fetch(url)).dataUrl);
     } else {
       try { const r = await fetch(url, { mode: 'cors' }); if (r.ok) { const b = await r.blob(); if (b.type.startsWith('image/') || b.type === 'application/pdf') blob = b; } } catch { /* fall through to <img> */ }
       if (!blob) blob = await new Promise((res, rej) => {
@@ -699,10 +708,22 @@ function getCanvasCoords(e) {
   return { x: Math.round(Math.max(0, Math.min(s.w, (sx - v.ox) / v.z))), y: Math.round(Math.max(0, Math.min(s.h, (sy - v.oy) / v.z))), rx: (sx - v.ox) / v.z, ry: (sy - v.oy) / v.z, sx, sy };
 }
 const shape = (tool, x1, y1, x2, y2) => ({ id: nextId++, tool, color: currentColor, width: currentWidth, x1, y1, x2, y2, note: '' });
+const touches = new Map(); let pinch = null;   // two fingers on the image zoom and pan it instead of drawing
+const pinchState = () => { const [a, b] = [...touches.values()]; return { d: Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)), x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }; };
 canvas.addEventListener('pointerdown', (e) => {
   const s = cur(); if (!s) return;
   canvas.focus({ preventScroll: true });
   const pos = getCanvasCoords(e), v = s.view;
+  if (e.pointerType === 'touch') {
+    touches.set(e.pointerId, { x: pos.sx, y: pos.sy });
+    if (touches.size === 2) {
+      if (drag && (drag.kind === 'move' || drag.kind === 'resize') && !drag.moved) s.undo.pop();
+      drag = null;   // the first finger's half-drawn mark is dropped
+      const g = pinchState(); pinch = { d: g.d, x: g.x, y: g.y, z: v.z, ox: v.ox, oy: v.oy };
+      refresh(); e.preventDefault(); return;
+    }
+    if (touches.size > 2) return;
+  }
   const left = e.button === 0;   // Shift + left drag pans and Ctrl + left click selects, whichever tool is active
   if (currentTool === 'pan' || spaceDown || e.button === 1 || (left && e.shiftKey)) { drag = { kind: 'pan', sx: pos.sx, sy: pos.sy, ox: v.ox, oy: v.oy }; canvas.style.cursor = 'grabbing'; }
   else if (!left) return;
@@ -728,6 +749,14 @@ canvas.addEventListener('pointerdown', (e) => {
 });
 canvas.addEventListener('pointermove', (e) => {
   const s = cur(); if (!s) return; const pos = getCanvasCoords(e);
+  if (touches.has(e.pointerId)) touches.set(e.pointerId, { x: pos.sx, y: pos.sy });
+  if (pinch) {
+    if (touches.size >= 2) {
+      const g = pinchState(), v = s.view, z = Math.max(.03, Math.min(16, pinch.z * g.d / pinch.d)), k = z / pinch.z;
+      v.ox = g.x - (pinch.x - pinch.ox) * k; v.oy = g.y - (pinch.y - pinch.oy) * k; v.z = z; v.fit = false; renderCanvas();
+    }
+    return;
+  }
   $('cursor-coords').textContent = `X: ${pos.x}, Y: ${pos.y}`;
   if (!drag) return; const a = drag.a;
   if (drag.kind === 'pan') { s.view.ox = drag.ox + pos.sx - drag.sx; s.view.oy = drag.oy + pos.sy - drag.sy; s.view.fit = false; renderCanvas(); return; }
@@ -759,7 +788,8 @@ function endDrag() {
   else if (d.kind === 'move' || d.kind === 'resize') { if (!d.moved) s.undo.pop(); refresh(); }
   else renderCanvas();
 }
-canvas.addEventListener('pointerup', endDrag); canvas.addEventListener('pointercancel', endDrag);
+const liftPointer = (e) => { touches.delete(e.pointerId); if (pinch) { if (touches.size < 2) pinch = null; return; } endDrag(); };
+canvas.addEventListener('pointerup', liftPointer); canvas.addEventListener('pointercancel', liftPointer);
 canvas.addEventListener('wheel', (e) => {
   if (!cur()) return; e.preventDefault(); const r = canvas.getBoundingClientRect();
   zoomAt(Math.exp(-e.deltaY * (e.ctrlKey ? .01 : .0018)), e.clientX - r.left, e.clientY - r.top);
@@ -833,7 +863,7 @@ function markData(s) {
     return o;
   });
 }
-let shotUrls = [];
+let shotUrls = [], lastOuts = [];
 async function openHandoff(send) {
   if (!images.length) return;
   const status = $('out-status'), shots = $('shots'); shots.replaceChildren(); shotUrls.forEach(u => URL.revokeObjectURL(u)); shotUrls = [];
@@ -853,7 +883,10 @@ async function openHandoff(send) {
       ]));
     }
   } catch { status.className = 'note bad'; status.textContent = 'The marked-up image could not be rendered. If the image came from another website, save it to your computer and drop the file in instead.'; return; }
-  if (send && bridge) {
+  lastOuts = outs;
+  if (native) {
+    status.textContent = 'Tap Share to Claude and pick Claude (or any other app) in the share sheet. The redline spec is copied at the same moment, so you can paste it into the same chat.';
+  } else if (send && bridge) {
     status.textContent = 'Sending to Claude…';
     try {
       const payload = { app: APP_NAME, spec: specText(), notes: $('extra-notes').value.trim(), numbered: showNumbers, images: [] };
@@ -869,12 +902,15 @@ async function openHandoff(send) {
   }
 }
 async function copyImage(blob) {
-  try { await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]); $('out-status').textContent = 'Image copied. Paste it (Ctrl+V) into your Claude chat.'; }
+  try {
+    if (native) await native.copyImage(blob); else await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+    $('out-status').textContent = native ? 'Image copied. Paste it into your Claude chat.' : 'Image copied. Paste it (Ctrl+V) into your Claude chat.';
+  }
   catch { $('out-status').textContent = 'Copying is blocked here. Right-click the image and choose Copy image, or drag it into the chat.'; }
 }
 async function copySpec(ta) {
   const text = specText();
-  try { await navigator.clipboard.writeText(text); showToast('Copied Redline Spec to clipboard. Paste (Ctrl+V) into chat!'); if (ta) $('out-status').textContent = 'Redline spec copied. Paste it (Ctrl+V) into your Claude chat.'; }
+  try { if (native) await native.copyText(text); else await navigator.clipboard.writeText(text); showToast('Copied Redline Spec to clipboard. Paste (Ctrl+V) into chat!'); if (ta) $('out-status').textContent = 'Redline spec copied. Paste it (Ctrl+V) into your Claude chat.'; }
   catch { if (!ta) await openHandoff(false); $('out-spec').focus(); $('out-spec').select(); $('out-status').textContent = 'Copying is blocked here. The spec is selected below; press Ctrl+C.'; }
 }
 /* ---------- save to this computer: a real Save As dialog where the browser has one, otherwise a download ---------- */
@@ -882,12 +918,13 @@ const SAVE_TYPES = { png: ['PNG image', 'image/png'], jpg: ['JPEG image', 'image
 let hostSave = null;   // file-save service of a hosting Claude page, when there is one
 const hostReady = window.claude && typeof window.claude.use === 'function' ? window.claude.use('downloads').then((d) => { hostSave = d; }).catch(() => {}) : Promise.resolve();
 async function pickTarget(filename, ext) {
-  if (typeof window.showSaveFilePicker !== 'function') return null;
+  if (native || typeof window.showSaveFilePicker !== 'function') return null;   // the iOS app uses the share sheet
   try { return await window.showSaveFilePicker({ suggestedName: filename, types: [{ description: SAVE_TYPES[ext][0], accept: { [SAVE_TYPES[ext][1]]: ['.' + ext] } }] }); }
   catch (e) { if (e && e.name === 'AbortError') throw e; return null; }   // AbortError = the person cancelled; anything else = not allowed here
 }
 async function writeOut(handle, blob, filename) {
   if (handle) { const w = await handle.createWritable(); await w.write(blob); await w.close(); return `Saved ${handle.name}.`; }
+  if (native) { await native.save(filename, blob); return `Saved ${filename}.`; }
   await hostReady;
   if (hostSave) { await hostSave.save({ filename, data: blob }); return `Saved ${filename}.`; }
   const url = URL.createObjectURL(blob), link = el('a', { href: url, download: filename });
@@ -945,6 +982,23 @@ async function doSave(e) {
   } catch (err) { status.className = 'note bad'; status.textContent = saveError(err); }
   $('btn-save-go').disabled = false;
 }
+async function shareOut() {
+  if (!native || !lastOuts.length) return; const status = $('out-status');
+  try {
+    await native.copyText(specText());
+    await native.share(lastOuts.map((o, i) => ({ filename: `${fileStem(i)}-annotated.png`, blob: o.blob })));
+    status.className = 'note ok'; status.textContent = 'Shared. The redline spec is on the clipboard: paste it into the chat next to the image.';
+  } catch (e) { status.className = 'note'; status.textContent = e && e.name === 'AbortError' ? 'Share cancelled. The redline spec is still copied.' : 'Sharing did not work. Use Copy Image and Copy Redline Spec instead.'; }
+}
+async function pasteFromApp() {
+  try {
+    const items = (await native.paste()).items || [];
+    if (!items.length) { showToast('Nothing to paste. Copy an image or a PDF first, then tap Paste.', true); return; }
+    for (const it of items) { if (it.url) await addUrl(it.url); else await addBlob(await dataUrlToBlob(it.dataUrl), it.name); }
+  } catch { showToast('The clipboard could not be read. Allow pasting when iOS asks, then tap Paste again.', true); }
+}
+/* Other parts of the app hand files in through this (Open in, share to the app, the clipboard). */
+window.REDLINE_MARKUP_STUDIO_ADD = async (dataUrl, name) => !!(await addBlob(await dataUrlToBlob(dataUrl), name));
 function closeDialogs() { for (const v of document.querySelectorAll('.veil')) v.hidden = true; if (pagesDone) pagesDone(null); }
 for (const v of document.querySelectorAll('.veil')) v.addEventListener('click', (e) => { if (e.target === v || e.target.closest('[data-close]')) closeDialogs(); });
 
@@ -1034,6 +1088,11 @@ $('btn-save').addEventListener('click', openSave);
 $('save-form').addEventListener('submit', doSave);
 $('btn-copy-spec').addEventListener('click', () => copySpec(false));
 $('btn-copy-spec-2').addEventListener('click', () => copySpec(true));
+if (native) {
+  $('btn-paste').hidden = false; $('btn-share').hidden = false;
+  $('btn-paste').addEventListener('click', pasteFromApp); $('btn-share').addEventListener('click', shareOut);
+  $('log-help').innerHTML = 'Tap <strong>Send to Claude</strong> to share the marked-up image to the Claude app with these exact coordinates copied for pasting, or <strong>Save Marked-Up File</strong> to keep a copy.';
+}
 $('btn-send').addEventListener('click', () => openHandoff(true));
 new ResizeObserver(() => renderCanvas()).observe(wrapper);
 

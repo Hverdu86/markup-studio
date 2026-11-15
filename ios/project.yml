@@ -1,0 +1,64 @@
+# Xcode project definition for the Redline_markup_studio iPhone and iPad app.
+# Generate the project with XcodeGen:  cd ios && xcodegen generate
+name: RedlineMarkupStudio
+options:
+  deploymentTarget:
+    iOS: "16.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+targets:
+  RedlineMarkupStudio:
+    type: application
+    platform: iOS
+    sources:
+      - path: App
+      # the studio page and its bundled decoders, shared with the Claude plugin
+      - path: ../skills/redline-markup-studio/assets
+        type: folder
+        buildPhase: resources
+    settings:
+      base:
+        PRODUCT_NAME: Redline_markup_studio
+        PRODUCT_BUNDLE_IDENTIFIER: com.hverdu86.redlinemarkupstudio
+        TARGETED_DEVICE_FAMILY: "1,2"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        GENERATE_INFOPLIST_FILE: "NO"
+        # built unsigned; Sideloadly signs it with your Apple ID when it installs
+        CODE_SIGNING_ALLOWED: "NO"
+        CODE_SIGNING_REQUIRED: "NO"
+        CODE_SIGN_IDENTITY: ""
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: Redline_markup_studio
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        UILaunchScreen: {}
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        ITSAppUsesNonExemptEncryption: false
+        NSCameraUsageDescription: Take a photo to mark up in Redline_markup_studio.
+        NSPhotoLibraryAddUsageDescription: Save your marked-up image to your photo library.
+        LSSupportsOpeningDocumentsInPlace: true
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: Image
+            LSHandlerRank: Alternate
+            LSItemContentTypes:
+              - public.image
+          - CFBundleTypeName: PDF document
+            LSHandlerRank: Alternate
+            LSItemContentTypes:
+              - com.adobe.pdf

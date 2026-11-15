@@ -1,0 +1,129 @@
+name: Build iOS app
+
+# Builds the Redline_markup_studio iPhone and iPad app on a Mac, checks it in iPhone and iPad
+# simulators, and publishes the unsigned .ipa (for Sideloadly) on the "ios-latest" release.
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "ios/**"
+      - "skills/redline-markup-studio/assets/**"
+      - ".github/workflows/ios.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ios-build
+  cancel-in-progress: true
+
+env:
+  BUNDLE_ID: com.hverdu86.redlinemarkupstudio
+  SCHEME: RedlineMarkupStudio
+
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate the Xcode project
+        run: |
+          xcodebuild -version
+          command -v xcodegen >/dev/null || brew install xcodegen
+          cd ios && xcodegen generate
+
+      - name: Build for iPhone and iPad (unsigned)
+        run: |
+          cd ios
+          set -o pipefail
+          xcodebuild -project RedlineMarkupStudio.xcodeproj -scheme "$SCHEME" -configuration Release \
+            -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build > build-device.log 2>&1 \
+            || { grep -nE "error:|warning: unre|BUILD FAILED" build-device.log | head -60; tail -30 build-device.log; exit 1; }
+          grep -E "warning:" build-device.log | sort -u | head -20 || true
+
+      - name: Package the .ipa
+        run: |
+          cd ios/build/Build/Products/Release-iphoneos
+          ls -la
+          mkdir Payload && cp -R Redline_markup_studio.app Payload/
+          zip -qry "$GITHUB_WORKSPACE/Redline_markup_studio.ipa" Payload
+          ls -la "$GITHUB_WORKSPACE/Redline_markup_studio.ipa"
+          /usr/libexec/PlistBuddy -c "Print" Payload/Redline_markup_studio.app/Info.plist | head -60
+          ls Payload/Redline_markup_studio.app Payload/Redline_markup_studio.app/assets Payload/Redline_markup_studio.app/assets/vendor
+
+      - name: Build for the simulator
+        run: |
+          cd ios
+          set -o pipefail
+          xcodebuild -project RedlineMarkupStudio.xcodeproj -scheme "$SCHEME" -configuration Debug \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath build-sim \
+            CODE_SIGNING_ALLOWED=NO build > build-sim.log 2>&1 \
+            || { grep -nE "error:|BUILD FAILED" build-sim.log | head -60; tail -30 build-sim.log; exit 1; }
+
+      - name: Run the app in iPhone and iPad simulators
+        run: |
+          APP="ios/build-sim/Build/Products/Debug-iphonesimulator/Redline_markup_studio.app"
+          pick() {
+            xcrun simctl list devices available -j | python3 -c '
+          import json, re, sys
+          want = sys.argv[1]
+          found = []
+          for runtime, devices in json.load(sys.stdin)["devices"].items():
+              if "iOS" not in runtime: continue
+              version = [int(n) for n in re.findall(r"\d+", runtime.split("iOS")[-1])]
+              for d in devices:
+                  if d["name"].startswith(want): found.append((version, d["name"], d["udid"]))
+          found.sort()
+          print(found[-1][2] + "|" + found[-1][1] + "|iOS " + ".".join(map(str, found[-1][0])))
+          ' "$1"
+          }
+          status=0
+          for kind in iPhone iPad; do
+            info=$(pick "$kind"); udid=${info%%|*}; echo "::group::$kind simulator: ${info#*|}"
+            xcrun simctl boot "$udid"; xcrun simctl bootstatus "$udid" -b >/dev/null
+            xcrun simctl install "$udid" "$APP"
+            xcrun simctl launch "$udid" "$BUNDLE_ID" -selftest
+            data=$(xcrun simctl get_app_container "$udid" "$BUNDLE_ID" data)
+            for i in $(seq 1 60); do [ -f "$data/Documents/selftest.json" ] && break; sleep 3; done
+            xcrun simctl io "$udid" screenshot "ios-$kind.png" || true
+            if [ -f "$data/Documents/selftest.json" ]; then
+              cp "$data/Documents/selftest.json" "selftest-$kind.json"; echo "SELFTEST $kind"; cat "selftest-$kind.json"
+              python3 - "selftest-$kind.json" <<'PY' || status=1
+          import json, sys
+          r = json.load(open(sys.argv[1])); bad = []
+          def need(key, ok):
+              if not ok(str(r.get(key, ""))): bad.append(f"{key}: {r.get(key)!r}")
+          need("1 app hooks", lambda v: v == "true,function,true")
+          need("2 sample loaded", lambda v: "sample-image.png" in v)
+          need("3 open PDF", lambda v: v.startswith("true"))
+          need("4 open TIFF", lambda v: v.startswith("true"))
+          need("5 images", lambda v: "selftest.png (300x200)" in v and "selftest" in v.split(";")[0])
+          need("6 draw a box", lambda v: v.startswith("1 mark") and "[BOX" in v)
+          need("7 save PNG", lambda v: v.startswith("Saved") and v.endswith(".png."))
+          need("8 save PDF, all pages", lambda v: v.startswith("Saved") and v.endswith(".pdf."))
+          saved = r.get("9 files the app received", {})
+          if not any(k.endswith(".png") and "PNG" in v for k, v in saved.items()): bad.append(f"no PNG reached the app: {saved}")
+          if not any(k.endswith(".pdf") and "%PDF" in v for k, v in saved.items()): bad.append(f"no PDF reached the app: {saved}")
+          print("SELFTEST RESULT:", "PASS" if not bad else "FAIL " + "; ".join(bad))
+          sys.exit(1 if bad else 0)
+          PY
+            else
+              echo "SELFTEST $kind: no report was written"; status=1
+            fi
+            xcrun simctl shutdown "$udid" || true
+            echo "::endgroup::"
+          done
+          exit $status
+
+      - name: Publish the .ipa
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete ios-latest --cleanup-tag --yes 2>/dev/null || true
+          sleep 3
+          gh release create ios-latest Redline_markup_studio.ipa ios-iPhone.png ios-iPad.png \
+            --target "$GITHUB_SHA" --title "Redline_markup_studio for iPhone and iPad" \
+            --notes "Unsigned build for sideloading. Download Redline_markup_studio.ipa and install it with Sideloadly, which signs it with your Apple ID. Needs iOS or iPadOS 16 or newer. Built from commit $GITHUB_SHA."
